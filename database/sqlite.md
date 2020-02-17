@@ -15,48 +15,101 @@ OS接口会根据系统指定如何调用底层系统实现。所有的必须解
 工具中包含如内存分配、字符串比较、Unicode转换之类的公共服务。
 测试模块中包含了回归测试用例，用来检查数据库代码的每个细节。
 
+### 查询数据
+``` sql
+sqlite> select * from foods where name='Cinnamon Bobka';
+sqlite> select last_insert_rowid();
+``` 
+### 修改数据
+#### 插入记录
+``` sql
+sqlite> insert into foods (name, type_id) values('Cinnaomon Bobka', 1);
+sqlite> insert into foods (NULL, 1, 'Blueberry Bobka');
 
+sqlite> insert into foods
+        values(null,
+              (select id from food_types where name='Bakery'),
+              'Blackberry Bobka');
 
-```sequence
-对象A->对象B: 对象B你好吗?（请求）
-Note right of 对象B: 对象B的描述
-Note left of 对象A: 对象A的描述(提示)
-对象B-->对象A: 我很好(响应)
-对象A->对象B: 你真的好吗？
+sqlite> insert into foods
+        select last_insert_rowid()+1, type_id, name 
+        from foods
+        where name='Chocolate Bobka';
 ```
+#### 插入多行数据
+``` sql
+sqlite> create table foods2(id int, type_id int, name text);
+sqlite> insert into foods2 select * from foods;
+sqlite> select count(*) from foods2;
+``` 
+直接指定从select语句中创建表。
+``` sql
+sqlite> create table foods2 as select * from foods;
+``` 
+create table 与从foods表选择数据插入表两步并未一步，对于创建临时表特别有用。
+``` sql
+sqlite> create temp table list as
+        select f.name food, t.name name,
+               (select count(episode_id)
+                from foods_episodes where food_id=f.id) episodes
+        from foods f, food_types t
+        where f.type_id=t.id;
+``` 
 
-```mermaid
-graph LR
-A[方形] -->B(圆角)
-    B --> C{条件a}
-    C -->|a=1| D[结果1]
-    C -->|a=2| E[结果2]
-    F[横向流程图]
+
+#### 更新记录
+``` sql
+sqlite> update table set update_list where predicate;
+``` 
+#### 
+``` sql
+sqlite> delete from table where predicate;
+``` 
+
+
+### 数据完整性
+数据完整性用于定义和保护表内部或表之间的数据关系。
+一般有四种完整性：
+域完整性、实体完整性、引用完整性和用户自定义完整性。
+域完整性设计控制字段内的值。实体完整性设计表中的行。
+引用完整性设计表之间的行，即外键关系。用户自定义完整新可以包罗万象。
+
+数据完整性是通过约束实现的。约束就是对字段存储值的一种限制措施。数据库会对字段中的存储值进行完整性约束强制实施。
+SQLite中，约束还包括对冲突解决的支持。
+
+``` sql
+sqlite> create table contacts (
+        id integer primary key,
+        name text not null collate nacase,
+        phone text not null default 'UNKNOWN',
+        unique (name,phone));
 ```
+字段级的约束包括not null, unique, primary key, foreign key, check和collate。
+表一级约束包括primary key, unique以及check。
+
+#### 主键约束
+在SQLite中,不管有没有定义主键,都会有一个字段,rowid,64-bit整性字段,还有两个别名_rowid_和oid, 默认取值按照增序自动生成。
 
 
-```flow
 
-//定义类型和描述
 
-st=>start: 开始
 
-e=>end: 结束
 
-op=>operation: 我的操作
 
-cond=>condition: 判断确认？
 
-st->op->cond
 
-cond(yes)->e
 
-cond(no)->op
 
-```
 
-note:
-使用 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Del</kbd> 重启电脑
+
+
+
+
+
+
+
+
+
 
 
 
