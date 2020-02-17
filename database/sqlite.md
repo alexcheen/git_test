@@ -70,9 +70,11 @@ sqlite> delete from table where predicate;
 ### 数据完整性
 数据完整性用于定义和保护表内部或表之间的数据关系。
 一般有四种完整性：
-域完整性、实体完整性、引用完整性和用户自定义完整性。
-域完整性设计控制字段内的值。实体完整性设计表中的行。
-引用完整性设计表之间的行，即外键关系。用户自定义完整新可以包罗万象。
+**域完整性、实体完整性、引用完整性和用户自定义完整性。**
+1. 域完整性设计控制字段内的值。
+2. 实体完整性设计表中的行。
+3. 引用完整性设计表之间的行，即外键关系。
+4. 用户自定义完整新可以包罗万象。
 
 数据完整性是通过约束实现的。约束就是对字段存储值的一种限制措施。数据库会对字段中的存储值进行完整性约束强制实施。
 SQLite中，约束还包括对冲突解决的支持。
@@ -90,8 +92,46 @@ sqlite> create table contacts (
 #### 主键约束
 在SQLite中,不管有没有定义主键,都会有一个字段,rowid,64-bit整性字段,还有两个别名_rowid_和oid, 默认取值按照增序自动生成。
 
+像唯一性约束一样，主键约束也可以定义在多个字段中。
+```sql
+sqlite> create table pkey(x text, y text, primary key(x,y));
+sqlite> insert into pkey values('x', 'y');
+sqlite> insert into pkey values('x', 'x');
+sqlite> select rowid, x, y from pkey;
+```
+|rowid|x|y|
+|-|-|-|
+|1|x|y|
+|2|x|x|
 
+#### 域完整性
+定义：字段的值必须是字段定义范围内的。
+域处理两个事情：**类型和范围**。
+##### 默认值
+default只是一个约束，它确保该字段有值，并在需要时出现。
+default还可以接受3种预定格式的ANSI/ISO保留字，用于生成日期和时间值。
+current_time生成格式(HH:MM:SS)的当前时间。
+current_data生成格式(YYYY-MM-DD)的当前日期。
+current_timestamp生成格式(YYYY-MM-DD HH:MM:SS)的事件戳。
+```sql
+sqlite> create table times
+        (id integer, data not null default current_date,
+        time not null default current_time,
+        timestamp not null default current_timestamp);
+```
 
+##### NOT NULL
+NOT NULL约束可以确保该字段不为NULL。处理未知数据和NOT NULL约束的实用方法时给该字段设定默认值。
+##### check约束
+check约束允许定义表达式来测试要插入或更新的字段值。
+```sql
+sqlite> create table contacts
+        (id integer primary key, 
+        name text not null collate nocase,
+        phone text not null default 'UNKNOWN',
+        unique (name, phone),
+        check (length(phone)>=7));
+```
 
 
 
