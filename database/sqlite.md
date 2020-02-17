@@ -132,8 +132,107 @@ sqlite> create table contacts
         unique (name, phone),
         check (length(phone)>=7));
 ```
+所有字段的check约束都是在修改发生前评估的。
+从功能上看，触发器可以与check约束一样有效地实现数据完整性。
+##### 外键约束
+SQLite支持关系理论中的关系完整性概念。关系完整性也叫外键。
+```sql
+sqlite> create table table_name
+        (column_defination references foreign_table (column_name)
+        on {delete|update} integrity_action
+        [not] deferrable [initially{deferred|immediate},] _);
+```
 
 
+```sql
+sqlite> create TABLE food_types
+        (id integer primary key,
+        name text);
+sqlite> create TABLE foods
+        (id integer primary key,
+        type_id integer,
+        name text);
+```
+为确保上面foods表中type_id之都存在与food_types的id字段，可如下方式定义表foods：
+
+```sql
+sqlite> create table foods
+        (id integer primary key,
+        type_id integer references food_types(id)
+        on delete restrict
+        deferrable initially deferred,
+        name text);                  
+```
+完整的规定定义如下：
+ * set null： 如果父值被删除获知不错在，剩余的子值将改为null；
+ * set default: 如上，则子值改为默认值；
+ * casecade: 更新父值时，更新所有预知匹配的子值。删除父值时，删除所有的子值。casecade的删除功能会出现意想不到的效果；
+ * restrict： 更新或删除父值可能会出现孤立的子值，从而阻止事务；
+ * no action: 使用一种松弛的方法，不干涉操作执行，只是观察变化。
+
+##### 排序规则
+SQLite有三种内置的排序规则，默认是二进制排序规则，该规则使用C函数memcpy()逐字节比较文本值。第二种是nocase，是拉丁字母中使用26个ASCII字符的非大小写敏感排序算法。第三种是reverse排序规则，它与二进制排序规则相反。
+
+## 存储类
+|名称|说明|
+|-|-|
+| integer|值是一个带符号的整数,根据值的大小存储在 1、2、3、4、6 或 8 字节中。|
+|real|值是一个浮点值，存储为 8 字节的 IEEE 浮点数字。|
+|text|值是一个文本字符串，使用数据库编码（UTF-8、UTF-16BE 或 UTF-16LE）存储。|
+|blob|值是一个 blob 数据，完全根据它的输入存储。|
+|NULL|值是一个 NULL 值。|
+
+SQL函数typeof()根据值的表示法返回其存储类。
+```sql
+sqlite> select typeof(3.14), typeof('3.14'),
+        typeof(314), typeof(x'3142), typeof(NULL);
+```
+|typeof(3.14)|typeof('3.14')| typeof(314)|typeof(x'3142)|typeof(NULL)|
+|-|-|-|-|-|
+|real|text|integer|blob|NULL|
+
+**SQLite中单独的一个字段可能包含不同存储类的值。**
+
+```sql
+sqlite> drop table domain;
+sqlite> create table domain(x);
+sqlite> insert into domain values(3.142);
+sqlite> insert into domain values('3.142');
+sqlite> insert into domain values(3142);
+sqlite> insert into domain values(x'3142');
+sqlite> insert into domain values(null);
+```
+不同类型值的比较顺序
+NULL<<integer=real<<text<<blob。
+
+## 视图
+视图即虚拟表，也称派生表，其内容都派生自其它表的查询结果。
+```sql
+sqlite> create view name as select-stmt;
+```
+```sql
+sqlite> select f.name, ft.name, e.name 
+        from foods f
+        inner join food_types ft on f.type_id = ft.id
+        inner join foods_episodes fe on f.id=fe.food_id
+        inner join episodes e on fe.episode_id = e.id;
+sqlite> create view details as
+        select f.name as fd, tf.name as tp, e.name as ep, e.season as ssn
+        from foods f
+        inner join food_types ft on f.type_id=ft.id
+        inner join foods_episodes fe on f.id= fe.food_id
+        inner join episodes e on fe.episodes=e.id;
+```
+创建视图后，可以像查询表一样查询details
+```sql
+sqlite> select fd as Food, ep as Episode
+        from details where ssn=7 and tp like 'Drinks';
+```
+视图的内容是动态生成的。因此，每次使用details时，基于数据库的当前数据执行相关的SQL语句，产生结果。
+视图的删除
+```sql
+sqlite> drop view name;
+```
 
 
 
