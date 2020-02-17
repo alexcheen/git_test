@@ -233,9 +233,14 @@ sqlite> select fd as Food, ep as Episode
 ```sql
 sqlite> drop view name;
 ```
+## 索引
 
-
-
+SQLite使用B-tree做索引。
+索引可以加速查询，但可能降低insert、update和类似操作的速度。
+```sql
+sqlite> create index [unique] index_name on table_name (columns);
+sqlite> drop index index_name;
+```
 
 
 
