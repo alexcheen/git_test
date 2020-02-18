@@ -242,18 +242,50 @@ sqlite> create index [unique] index_name on table_name (columns);
 sqlite> drop index index_name;
 ```
 
+### 使用索引
+SQLite中有一些具体的条件来判断是否使用索引。
+如果可以，对于下面会在WHERE子句中出现的表达式，SQLite将使用单个字段索引。
+```sql
+sqlite> column {=|>|>=|<|<=} expression
+        expression {=|>|>=|<|<=} column
+        column IN (expression-list)
+        column IN (subquery)
+```
+最后，创建索引时，一定要有理由确保可以获得性能的改善。选择好的索引时非常重要的；分布凌乱的索引可能会导致希望获得良好的性能愿望落空。
 
+## 触发器
+```sql
+sqlite> create [temp|temprary] trigger name
+        [before|after] [insert|delete|update|update of columns] on table
+        action
+```
+触发器时通过名称、行为和表定义的。行为(或者称为触发体)由一系列SQL命令组成，当某些事件发生时，触发器负责启动这些命令。
+事件包括在具体的表中执行delete、insert和update命令。
+触发器可以用来创建自定义完整性约束、日志变更、更新表和其它事情。
+触发器的作用只限于所写的SQL命令。
+### 更新触发器
+与insert和delete触发器不同，update触发器可以在表的执行字段上定义。这种触发器的格式一般为：
+```sql
+sqlite> create trigger name
+        [before|after] update of column on table
+        action
+```
+下面时一个update触发器的SQL脚本
+```sql
+sqlite> create temp table log(x);
+sqlite> create temp trigger foods_update_log update of name on foods
+        begin
+          insert into log values('updated foods: new name=' ||new.name);
+        end;
+```
 
+### 错误处理
+定义为事件发生前执行的触发器有机会阻止事件的发生，同样，定义为事件发生后执行的触发器可以检查事件，具备重新思考的机会。
+before和after触发器可以具备实施新的完整性约束。
+SQLite提供一个特殊的SQL函数raise()供触发器调用，该函数允许在触发器内产生错误。
+```sql
+sqlite> raise(resolution, error_message);
+```
+第一个参数时冲突解决策略(abort, fail, ignore, rollback等)。第二个参数时错误消息。
 
-
-
-
-
-
-
-
-
-
-
-
-
+### 可更新的视图
