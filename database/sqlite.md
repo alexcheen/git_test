@@ -289,3 +289,125 @@ sqlite> raise(resolution, error_message);
 第一个参数时冲突解决策略(abort, fail, ignore, rollback等)。第二个参数时错误消息。
 
 ### 可更新的视图
+
+
+## 事务
+事务定义了一组SQL命令的边界。
+### 事务的范围
+事务由3个命令控制：begin、commit和rollback。
+begin开始一个事务，如果没有commit，begin之后所有的操作会被取消，rollback类似。
+commit提交事务开始后执行的所有操作。
+SQLite也支持savepoint和release命令。包含多个语句的工作体可以设置savepoint，回滚可以返回到某个savepoint。
+```sql
+sqlite> savepoint justincase;
+sqlite> rollback [transcation] to justincace;
+```
+### 冲突解决
+SQLite有特殊的方法允许指定不同的方式来处理约束违反。
+默认行为时终止命令并回滚所有修改，保证事务的完整性。
+SQLite提供5种可能的冲突解决方案或策略：replace、ignore、fail、abort和rollback。
+```sql
+sqlite> insert or resolution into table (column_list) values(value_list);
+sqlite> update or resolution table set (value_list) where predicate;
+```
+### 数据库锁
+在SQLite中，锁和事务时紧密相连的。SQLite使用锁逐步提升机制，有5中不同的锁状态：未加锁(unlocked)、共享(shared)、预留(reserved)、未决(pending)、排它(exclusive)。
+
+### 事务的类型
+在SQLite有三种不同的事务类型，[deferred|immediate|exclusive].
+```sql
+sqlite> begin [deferred|immediate|exclusive] transaction;
+```
+
+# 总体设计和概念
+对象模型
+![对象模型](../images/sqlite_object_model.PNG)
+![对象模型](sqlite_object_model.PNG)
+### 执行预查询
+VDBE：虚拟数据库引擎(Virtual DataBase Engine,VDBE)；
+
+执行一条SQL命令的处理分为以下三个步骤：
+ * 准备：语法分析器、词法分析器以及代码生成器将命令编译成VDBE字节码，以准备SQL语句。编译器创建sqlite3_stmt句柄，包括字节码、执行命令和迭代结果集所需的所有其它资源。
+ * 执行：VDBE执行字节码。执行时意个逐步的过程。C API中，每一步都由sqlite3_step()发起，并使VDBE逐步执行字节码。第一次调用slqite3_step()通常需要某种类型的锁，锁的类型根据执行什么样的命令(读或写)而变化。对于SELECT语句，sqlite3_step()的每次调用将使语句句柄的游标位置移动到结果集的下一行。对于结果集中的每一行，游标未到达结果集的末尾时，将返回SQLITE_ROW；反之，将返回SQLITE_DONE。对于其它SQL语句(insert, update, delete)，第一次调用sqlite3_step()将促使VDBE执行整个命令。
+ * 完成：VDBE关闭语句并释放资源。C API中，由sqlite3_finalize()来执行，该函数使得VDBE终止程序、释放资源并关闭statement句柄。
+
+以下伪代码说明SQLite中执行一个查询的通用处理
+```sql
+# 1. 打开数据库，创建一个连接对象db
+db = open('foods.db')
+
+# 2.A. 准备一个statement（stmt）
+stmt = db.prepare('SELECT * FROM episodes')
+
+# 2.b. 执行，调用step(), 直到游标到达结果集末尾。
+while stmt.step() == SQLITE_ROW
+    print stmt.colum('name');
+end
+
+# 2.c. 完成后释放读锁。
+stmt.finalize()
+
+# 3. 插入一条记录
+stmt = db.prepare('INSERT INTO foods VALUES(...)')
+stmt.step()
+stmt.finalize()
+
+# 4. 关闭数据库连接。
+db.close()
+```
+
+#### 临时存储器
+临时存储器可以是RAM或文件，并通过编译指示**temp_store**明确指定。采用基于文件的存储，可以使用编译指示**temp_store_directory**来明确存储文件的路径。
+
+### 使用参数化SQL
+
+SQL语句可以包含参数，参数就是占位符，可能会在编译后为其提供值。
+```sql
+sqlite> insert into foods (id,name) values(?,?);
+sqlite> insert into episodes (id,name) (:id, :name);
+```
+参数绑定的优点是无需重新编译，就可以多次执行相同语句。可以避免SQL编译开销。
+参数绑定的另一个优点时SQLite会处理绑定到参数的转义字符。避免了语法错误和可能的SQL注入式攻击。
+
+```sql
+db = open('foods.db')
+stmt = db.prepare('insert into episodes (id, name) values (:id, :name)')
+
+stmt.bind('id', '1')
+stmt.bind('name', 'Soup Nazi')
+stmt.step()
+
+stmt.reset()
+stmt.bind('id', '2')
+stmt.bind('name', 'The Junior Mint')
+
+stmt.finalize()
+db.close()
+```
+
+### 错误处理
+```
+if db.errcode() != SQLITE_OK
+        print db.errmg(stmt)
+```
+### SQL语句格式化
+```c
+char * before = "Hey, at least %q no pig-man.";
+char * after = sqlite3_mprintf(before, "he's");
+```
+
+### 可操作的控制
+API中包含很多监视、控制或限制数据库中发生什么的命令。
+SQLite以过滤或者回调函数方式实现该功能，可以为指定事件注册要调用的函数。
+由三种钩子函数：
+ * sqlite3_commit_hook(),用于监视连接上的事务提交；
+ * sqlite3_rollback_hook(),用于监视回滚；
+ * sqlite3_update_hook(),用于监视insert、update和delete命令更改操作。
+
+此外，API提供名为sqlite3_set_authorizer()的功能非常强大的编译时钩子。该函数几乎提供对数据库中发生的一切事件的细粒度控制，并能够限制对数据库、表和列的访问和修改。
+
+### 使用线程
+SQLite拥有一批在多线程环境中使用的函数。
+在3.3.1版本中，SQLite引入了独特的运行模式：共享缓存模式。该模式时为多线程的嵌入式服务器设计的，它可以让单个线程拥有共享页面缓存的多个连接，从而减低服务器的总内存。
+
+
