@@ -322,7 +322,6 @@ sqlite> begin [deferred|immediate|exclusive] transaction;
 # 总体设计和概念
 对象模型
 ![对象模型](../images/sqlite_object_model.PNG)
-![对象模型](sqlite_object_model.PNG)
 ### 执行预查询
 VDBE：虚拟数据库引擎(Virtual DataBase Engine,VDBE)；
 
