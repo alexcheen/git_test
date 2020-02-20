@@ -409,158 +409,25 @@ SQLite以过滤或者回调函数方式实现该功能，可以为指定事件�
 SQLite拥有一批在多线程环境中使用的函数。
 在3.3.1版本中，SQLite引入了独特的运行模式：共享缓存模式。该模式时为多线程的嵌入式服务器设计的，它可以让单个线程拥有共享页面缓存的多个连接，从而减低服务器的总内存。
 
-# 核心 C API
 
-## 连接与断开连接
+## 准备查询
 
+### 编译
+编译或准备接受SQL语句，并将其编译为虚拟数据库引擎VDBE刻度的字节码。
+函数声明：
 ```c
-int sqlite3_open_v2(
-        const char * filename,
-        sqlite3 **ppDb,
-        int flags,
-        const char *zVfs
+int sqlite3_parepare_v2(
+        sqlite3 *db, /* Database handle */
+        const char *zSql, /* SQL text, UTF-8 encoded */
+        int nBytes, /* Length of zSql in bytes. */
+        sqlite3_stmt **ppStmt, /* OUT: Statement handle */
+        const char **pzTail /* OUT: Pointer to unused portion of zSql */
 );
-
-int sqlite3_open(
-        const void *filename,
-        sqlite3 **ppDb
-);
-
-int sqlite3_open16(
-        const void *filename,
-        sqlite3 **ppDb
-);
-
 ```
+函数sqlite3_prepare_v2()不会对连接或数据库有任何影响，也不会启动事务或获取锁。语句句柄高度依赖它们所被编译的数据库模式。如果另一个连接在您准备语句和实际执行语句期间更改了数据库模式，那准备语句就会失效。失效后会尝试重新编译，如果不能成功将会导致SQLITE_SCHEMA相关错误。
 
-### 执行查询
+### 执行
+查询语句就绪后，由sqlite3_step()执行。
 ```c
-int sqlite3_exec(
-        sqlite3*,
-        const char *sql,
-        sqlite_callback,
-        void *data,
-        char **errmsg
-);
-```
-回调函数声明：
-```c
-typedef int (*sqlite3_callback)(
-        void*, // sqlite3_exec()函数第四个参数提供数据，
-        int,   // 行中字段的数目
-        char**,// 代表行中字段名称的字符串数组
-        char** // 代表字段名称的字符串数组
-);
-```
-
-简单的SQLite查询
-``` c
-int main(int argc, char **argv){
-        sqlite3 *db;
-        char *zErr;
-        int rc;
-        char *sql;
-        rc = sqlite3_open_v2("test.db", &db);
-        if(rc){
-                fprintf(stderr, "can't open db: %s\n", sqlite3_errmsg(db));
-                exit(1);
-        }
-
-        sql = "create table episodes(id int, name text);";
-        rc = sqlite3_exec(db,sql, NULL, NULL, &zErr);
-
-        if(rc!=SQLITE_OK)
-        {
-                if(zErr!=NULL){
-                        fprintf(stderr, "SQL error:%s\n", zErr);
-                        sqlite3_free(zErr);//注意要释放内存
-                }
-        }
-        sql = "insert into episodes values (10, 'The Dinner Party')";
-        rc = sqlite3_exec(db, sql, NULL, NULL, &zErr);
-
-        sqlite3_close(db);
-        return 0;
-}
-```
-使用sqlite3_exec()处理记录
-
-```c
-int callback(void* data, int ncols, char** values, char** headers);
-int main(int argc, char** argv)
-{
-        sqlite3 *db;
-        int rc;
-        char *sql;
-        char *zErr;
-
-        rc = sqlite3_open_v2("test.db", &db);
-        if(rc)
-        {
-                fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-                sqlite3_close(db);
-                sqlite3_close(db);
-                exit(1);
-        }
-        const char* data = "Callback function called";
-        sql = "insert into episodes (id, name) values(11, 'Mackinaw Peaches');"
-        "select * from episodes;";
-        rc = sqlite3_exec(db, sql, callback, data, &zErr);
-        if(rc!=SQLITE_OK){
-                if(zErr!=NULL){
-                        fprintf(stderr, "SQL error:%s\n", zErr);
-                        sqlite3_free(zErr);
-                }
-        }
-        sqlite3_close(db);
-        return 0;
-}
-int callback(void* data, int ncols, char** values, char** headers)
-{
-        int i;
-        fprintf(stderr, "%s: ", (const char*)data);
-        for(i=0; i < ncols; i++) {
-                fprintf(stderr, "%s=%s ", headers[i], values[i]);
-        }
-        fprintf(stderr, "\n");
-        return 0;
-}
-```
-
-### 准备查询
-
-准备查询优点
- * 准备查询不需要回调接口，编码简单、清晰；
- * 准备查询关联了提供列信息的函数，可以获取列的存储类型、声明类型、模式名称、表明和数据库名。sqlite3_exec()的回调接口只提供列的名称。
- * 准备查询提供了一种除文本外的获取字段/列值的方法，可以以C数据类型获取，例如int和double型，而sqlite3_exec()的回调接口只提供字符串格式的字符值；
- * 准备查询可以重新运行，可以重用已编译的SQL；
- * 准备查询支持参数化的SQL语句；
-
-#### 检查变化
-执行更新或删除操作时，可以从sqlite3_changes()获取由多少记录受影响。
-
-### 获取表查询
-函数sqlite3_get_table()返回单独函数调用中的一个命令的整个结果集。
-```c
-int sqlite3_get_table(
-        sqlite3*,
-        const char *sql,
-        char ***resultp,
-        int *nrow,
-        int *ncolumn,
-        char **errmsg
-);
-```
-
-```sql
-int main(int argc, char **argv)
-{
-        /* Connect to database, etc. */
-        char *result[];
-        sql = "select * from episodes;";
-        rc = sqlite3_get_table(db, sql, &result, &nrows, &ncols, &zErr);
-        /* Do something with data */
-        /* Free memory */
-        sqlite3_free_table(result)
-}
+int sqlite3_step(sqlite3_stmt *pStmt);
 ```
