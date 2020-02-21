@@ -120,6 +120,14 @@ sqlite> create table times
         timestamp not null default current_timestamp);
 ```
 
+```sql
+sqlite> create tabe times
+        (id integer, data not null default current_date,
+        time not null default current_time,
+        timestamp not null default current_timestamp,
+        localtimestamp not null default (datetime(CURRENT_TIMESTAMP,'localtime')));
+```
+注意之上有时区转换的语句。
 ##### NOT NULL
 NOT NULL约束可以确保该字段不为NULL。处理未知数据和NOT NULL约束的实用方法时给该字段设定默认值。
 ##### check约束
@@ -409,6 +417,161 @@ SQLite以过滤或者回调函数方式实现该功能，可以为指定事件�
 SQLite拥有一批在多线程环境中使用的函数。
 在3.3.1版本中，SQLite引入了独特的运行模式：共享缓存模式。该模式时为多线程的嵌入式服务器设计的，它可以让单个线程拥有共享页面缓存的多个连接，从而减低服务器的总内存。
 
+# 核心 C API
+
+## 连接与断开连接
+
+```c
+int sqlite3_open_v2(
+        const char * filename,
+        sqlite3 **ppDb,
+        int flags,
+        const char *zVfs
+);
+
+int sqlite3_open(
+        const void *filename,
+        sqlite3 **ppDb
+);
+
+int sqlite3_open16(
+        const void *filename,
+        sqlite3 **ppDb
+);
+
+```
+
+### 执行查询
+```c
+int sqlite3_exec(
+        sqlite3*,
+        const char *sql,
+        sqlite_callback,
+        void *data,
+        char **errmsg
+);
+```
+回调函数声明：
+```c
+typedef int (*sqlite3_callback)(
+        void*, // sqlite3_exec()函数第四个参数提供数据，
+        int,   // 行中字段的数目
+        char**,// 代表行中字段名称的字符串数组
+        char** // 代表字段名称的字符串数组
+);
+```
+
+简单的SQLite查询
+``` c
+int main(int argc, char **argv){
+        sqlite3 *db;
+        char *zErr;
+        int rc;
+        char *sql;
+        rc = sqlite3_open_v2("test.db", &db);
+        if(rc){
+                fprintf(stderr, "can't open db: %s\n", sqlite3_errmsg(db));
+                exit(1);
+        }
+
+        sql = "create table episodes(id int, name text);";
+        rc = sqlite3_exec(db,sql, NULL, NULL, &zErr);
+
+        if(rc!=SQLITE_OK)
+        {
+                if(zErr!=NULL){
+                        fprintf(stderr, "SQL error:%s\n", zErr);
+                        sqlite3_free(zErr);//注意要释放内存
+                }
+        }
+        sql = "insert into episodes values (10, 'The Dinner Party')";
+        rc = sqlite3_exec(db, sql, NULL, NULL, &zErr);
+
+        sqlite3_close(db);
+        return 0;
+}
+```
+使用sqlite3_exec()处理记录
+
+```c
+int callback(void* data, int ncols, char** values, char** headers);
+int main(int argc, char** argv)
+{
+        sqlite3 *db;
+        int rc;
+        char *sql;
+        char *zErr;
+
+        rc = sqlite3_open_v2("test.db", &db);
+        if(rc)
+        {
+                fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+                sqlite3_close(db);
+                sqlite3_close(db);
+                exit(1);
+        }
+        const char* data = "Callback function called";
+        sql = "insert into episodes (id, name) values(11, 'Mackinaw Peaches');"
+        "select * from episodes;";
+        rc = sqlite3_exec(db, sql, callback, data, &zErr);
+        if(rc!=SQLITE_OK){
+                if(zErr!=NULL){
+                        fprintf(stderr, "SQL error:%s\n", zErr);
+                        sqlite3_free(zErr);
+                }
+        }
+        sqlite3_close(db);
+        return 0;
+}
+int callback(void* data, int ncols, char** values, char** headers)
+{
+        int i;
+        fprintf(stderr, "%s: ", (const char*)data);
+        for(i=0; i < ncols; i++) {
+                fprintf(stderr, "%s=%s ", headers[i], values[i]);
+        }
+        fprintf(stderr, "\n");
+        return 0;
+}
+```
+
+### 准备查询
+
+准备查询优点
+ * 准备查询不需要回调接口，编码简单、清晰；
+ * 准备查询关联了提供列信息的函数，可以获取列的存储类型、声明类型、模式名称、表明和数据库名。sqlite3_exec()的回调接口只提供列的名称。
+ * 准备查询提供了一种除文本外的获取字段/列值的方法，可以以C数据类型获取，例如int和double型，而sqlite3_exec()的回调接口只提供字符串格式的字符值；
+ * 准备查询可以重新运行，可以重用已编译的SQL；
+ * 准备查询支持参数化的SQL语句；
+
+#### 检查变化
+执行更新或删除操作时，可以从sqlite3_changes()获取由多少记录受影响。
+
+### 获取表查询
+函数sqlite3_get_table()返回单独函数调用中的一个命令的整个结果集。
+```c
+int sqlite3_get_table(
+        sqlite3*,
+        const char *sql,
+        char ***resultp,
+        int *nrow,
+        int *ncolumn,
+        char **errmsg
+);
+```
+
+```sql
+int main(int argc, char **argv)
+{
+        /* Connect to database, etc. */
+        char *result[];
+        sql = "select * from episodes;";
+        rc = sqlite3_get_table(db, sql, &result, &nrows, &ncols, &zErr);
+        /* Do something with data */
+        /* Free memory */
+        sqlite3_free_table(result);
+}
+```
 
 ## 准备查询
 
@@ -431,3 +594,289 @@ int sqlite3_parepare_v2(
 ```c
 int sqlite3_step(sqlite3_stmt *pStmt);
 ```
+sqlite3_step()接受语句句柄，并直接与VDBE通信，生成执行SQL语句的每个步骤的字节码指令。第一次调用sqlite3_step()时，VDBE获得执行改命令所需的必要的数据库锁。不能获取锁并且没有指派繁忙处理程序，sqlite3_step()将返回SQLITE_BUSY。如果指派了繁忙处理程序，将调用该程序。
+
+### 完成与重置
+一旦语句执行结束，必须终止。
+```c
+int sqlite3_finalize(sqlite3_stmt *pStmt);
+int sqlite3_reset(sqlite3_stmt *pStmt);
+```
+sqlite3_finalize()关闭语句stmt，释放资源并提交或回滚任何隐式事务，清除日志文件并释放相关联的锁。
+
+```c
+int test_2()
+{
+    int rc, i, ncols;
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    char *sql;
+    const char *tail;
+    rc = sqlite3_open("test.db", &db);
+    if(rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return  (1);
+    }
+    sql = "select * from episodes;";
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, &tail);
+    if(rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+    }
+    rc = sqlite3_step(stmt);
+    ncols = sqlite3_column_count(stmt);
+    while(rc == SQLITE_ROW) {
+        for(i=0; i < ncols; i++) {
+            fprintf(stderr, "'%s' ", sqlite3_column_text(stmt, i));
+        }
+        fprintf(stderr, "\n");
+        rc = sqlite3_step(stmt);
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+```
+
+sqlite3_prepare_v2()可以接受包含多条SQL语句的字符串。通过pzTail参数确保处理字符串中其余SQL语句变得容易。
+```c
+while(sqlite3_complete(sql))
+{
+        rc = sqlite3_prepare(db, sql, -1, &stmt, &tail);
+        //process query results
+
+        // skip to next cmd in string
+        sql = tail;
+}
+```
+### 获取记录
+函数声明：
+```c
+int sqlite3_column_count(sqlite3_stmt *pStmt);
+int sqlite3_data_count(sqlite3_stmt *pStmt);
+```
+#### 获取字段信息
+```c
+
+
+const char *sqlite3_column_name(sqlite3_stmt*, int iCol);
+int sqlite3_column_type(sqlite3_stmt*, int iCol);
+
+#define SQLITE_INTEGER 1
+#define SQLITE_FLOAT 2
+#define SQLITE_TEXT 3
+#define SQLITE_BLOB 4
+#define SQLITE_NULL 5
+```
+sqlite3_column_decltype()函数获取字段在表模式定义中声明的数据类型。
+```c
+const char *sqlite3_column_decltype(sqlite3_stmt*, int iCol);
+```
+
+除了类型声明，还可以使用以下函数获得某一列的其它信息：
+```c
+const char *sqlite3_column_database_name(sqlite3_stmt *pStmt, int iCol);
+const char *sqlite3_column_table_name(sqlite3_stmt *pStmt, int iCol);
+const char *sqlite3_column_origin_name(sqlite3_stmt *pStmt, int iCol);
+```
+The first function will return the database associated with a column, the second will return its table, and
+the last function will return the column’s actual name as defined in the schema. **Note that these functions are available only if you compile SQLite with the
+SQLITE_ENABLE_COLUMN_METADATA preprocessor directive.**
+
+### Getting Column Values
+
+```c
+int sqlite3_column_int(sqlite3_stmt*, int iCol);
+double sqlite3_column_double(sqlite3_stmt*, int iCol);
+long long int sqlite3_column_int64(sqlite3_stmt*, int iCol);
+const void *sqlite3_column_blob(sqlite3_stmt*, int iCol);
+const unsigned char *sqlite3_column_text(sqlite3_stmt*, int iCol);
+const void *sqlite3_column_text16(sqlite3_stmt*, int iCol);
+```
+
+|Internal |Type Requested |Type Conversion|
+|-|-|-|
+|NULL |INTEGER |Result is 0.|
+|NULL |FLOAT |Result is 0.0.|
+|NULL |TEXT |Result is a NULL pointer.|
+|NULL |BLOB |Result is a NULL pointer.|
+|INTEGER |FLOAT |Convert from integer to float.|
+|INTEGER |TEXT |Result is the ASCII rendering of the integer.|
+|INTEGER |BLOB |Result is the ASCII rendering of the integer.|
+|FLOAT |INTEGER |Convert from float to integer.|
+|FLOAT |TEXT |Result is the ASCII rendering of the float.|
+|FLOAT |BLOB |Result is the ASCII rendering of the float.|
+|TEXT |INTEGER |Use atoi().|
+|TEXT |FLOAT |Use atof().|
+|TEXT |BLOB |No change.|
+|BLOB |INTEGER |Convert to TEXT and then use atoi().|
+|BLOB |FLOAT |Convert to TEXT and then use atof().|
+|BLOB |TEXT |Add a \000 terminator if needed.|
+
+BLOB复制时碧血指定其长度。对于BLOB列，可以使用sqlite3_column_bytes()获取实际数据长度。
+```c
+int sqlite3_column_bytes(sqlite3_stmt*, int iCol);
+```
+获取数据副本的方法
+```c
+int len = sqlite3_column_bytes(stmt,iCol);
+void* data = malloc(len);
+memcpy(data,sqlite3_column_blob(stmt,iCol),len);
+//memcpy(void *Dst, void *Src, size_t n)
+```
+返回语句的连接句柄
+```c
+int sqlite3_db_handle(sqlite3_stmt*);
+```
+以上获取连接句柄的函数，在一些使用语句句柄的函数遇到措施时，获取语句的连接句柄，并从sqlite3_errmsg()中获取错误信息。
+
+### 参数化查询 Prameterized Queries
+
+```c
+int sqlite3_bind_int(sqlite3_stmt*, int, int);
+int sqlite3_bind_double(sqlite3_stmt*, int, double);
+int sqlite3_bind_int64(sqlite3_stmt*, int, long long int);
+int sqlite3_bind_null(sqlite3_stmt*, int);
+int sqlite3_bind_blob(sqlite3_stmt*, int, const void*, int n, void(*)(void*));
+int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
+int sqlite3_bind_text(sqlite3_stmt*, int, const char*, int n, void(*)(void*));
+int sqlite3_bind_text16(sqlite3_stmt*, int, const void*, int n, void(*)(void*));
+```
+绑定函数可以分为两类，一类用于标量值(int, double, int64, NULL),
+另一类用于数组(blob, text, text16)。
+API为清理句柄提供了如下两个有特殊含义的预定义值。
+```c
+#define SQLITE_STATIC ((void(*)(void *))0)
+#define SQLITE_TRANSIENT ((void(*)(void *))-1)
+```
+每个值指定一个特定的清理操作。SQLITE_STATIC告诉数组绑定函数数组内存驻留在非托管的空间，SQLite不会试图清理该空间。SQLITE_TRANSIENT告诉绑定函数数组内存经常变化，SQLite需要使用自己的数据副本，该数据副本在语句总结时会自动清除。第三个选项提供过一个指向用户自定义的清理函数的指针，该清理函数形式如下：
+```c
+void cleanup_fn(void *)'
+```
+```c
+const char* sql = "insert into foo values(?,?,?)";
+sqlite3_prepare(db, sql, strlen(sql), &stmt, &tail);
+sqlite3_bind_int(stmt, 1, 2);
+sqlite3_bind_text(stmt, 2, "pi");
+sqlite3_bind_double(stmt, 3, 3.14);
+sqlite3_step(stmt);
+sqlite3_finalize(stmt);
+```
+### 参数编号
+对于位置参数，sqlite3_prepare()分配从1开始的顺序整数值。
+sqlite也允许为参数指定编号，而不是必须使用内部的序列。
+参数标号的语法是问号后紧跟一个数字。
+```c
+// example
+name = "Mackinaw Peaches";
+sql = "insert into episodes (id, cid, name) "
+"values (?100,?100,?101)";
+rc = sqlite3_prepare(db, sql, strlen(sql), &stmt, &tail);
+if(rc != SQLITE_OK) {
+        fprintf(stderr, "sqlite3_prepare() : Error: %s\n", tail);
+        return rc;
+}
+
+sqlite3_bind_int(stmt, 100, 10);
+sqlite3_bind_text(stmt, 101, name, strlen(name), SQLITE_TRANSIENT);
+
+sqlite3_step(stmt);
+sqlite3_finalize(stmt);
+```
+**注意，在SQL语句中给参数编号时，请记住允许的范围时整数值1~999。若要取得最优的性能和内存利用率，应选择较小的数字。**
+### 参数命名 named parameters
+第三种参数绑定的方法是给参数命名。标识命名的参数实在前面加上一个冒号或AT符号@的参数的名称。
+```c
+name = "Mackinaw Peaches";
+sql = "insert into episodes (id, cid, name) values (:cosmo,:cosmo,@newman)";
+rc = sqlite3_prepare(db, sql, strlen(sql), &stmt, &tail);
+sqlite3_bind_int( stmt,
+sqlite3_bind_parameter_index(stmt, ":cosmo"), 10);
+sqlite3_bind_text( stmt,
+sqlite3_bind_parameter_index(stmt, "@newman"),
+                name,strlen(name), SQLITE_TRANSIENT );
+sqlite3_step(stmt);
+sqlite3_finalize(stmt);
+```
+
+### TCL 参数
+最后一个参数模式名称为Tcl参数，是Tcl的特定扩展。基本上，它与参数命名完全相同，只是使用一些变量作为参数名称。Tcl扩展中调用相当于sqlite_prepare()的Tcl函数时，Tcl扩展自动搜索与给定参数名相同的活跃的Tcl变量，并将它们绑定到各自的参数。
+
+## 错误与异常 Errors and the Unexpected
+可返回结果代码的API函数：
+```c
+sqlite3_bind_xxx()
+sqlite3_close()
+sqlite3_create_collation()
+sqlite3_collation_needed()
+sqlite3_create_function()
+sqlite3_prepare_v2()
+sqlite3_exec()
+sqlite3_finalize()
+sqlite3_get_table()
+sqlite3_open_v2()
+sqlite3_reset()
+sqlite3_step()
+```
+|Code |Description|
+|-|-|
+|SQLITE_OK |The operation was successful.|
+|SQLITE_ERROR |General SQL error or missing database. It may be possible to obtain moreerror information depending on the error condition (SQLITE_SCHEMA, for example).|
+|SQLITE_INTERNAL |Internal logic error.|
+|SQLITE_PERM |Access permission denied.|
+|SQLITE_ABORT |A callback routine requested an abort.|
+|SQLITE_BUSY |The database file is locked.|
+|SQLITE_LOCKED |A table in the database is locked.|
+|SQLITE_NOMEM |A call to malloc() has failed within a database operation.|
+|SQLITE_READONLY |An attempt was made to write to a read-only database.|
+|SQLITE_INTERRUPT |Operation was terminated by sqlite3_interrupt().|
+|SQLITE_IOERR |Some kind of disk I/O error occurred.|
+|SQLITE_CORRUPT |The database disk image is malformed. This will also occur if an attempt ismade to open a non-SQLite database file as a SQLite database.|
+|SQLITE_FULL |Insertion failed because the database is full. There is no more space on the file system or the database file cannot be expanded.|
+|SQLITE_CANTOPEN |SQLite was unable to open the database file.|
+|SQLITE_PROTOCOL |The database is locked or there has been a protocol error.|
+|SQLITE_EMPTY |(Internal only.) The database table is empty.|
+|SQLITE_SCHEMA |The database schema has changed.|
+|SQLITE_CONSTRAINT |Abort due to constraint violation.|
+|SQLITE_MISMATCH |Data type mismatch. An example of this is an attempt to insert noninteger data into a column labeled INTEGER PRIMARY KEY. For most columns, SQLite ignores the data type and allows any kind of data to be stored. But an INTEGER PRIMARY KEY column is allowed to store integerdata only.|
+|SQLITE_MISUSE |Library was used incorrectly. This error might occur if one or more of the SQLite API routines is used incorrectly.|
+|SQLITE_NOLFS |Uses OS features not supported on host. This value is returned if the SQLite library was compiled with large file support (LFS) enabled but LFS isn’t supported on the host operating system.|
+|SQLITE_AUTH |Authorization denied. This occurs when a callback function installed using sqlite3_set_authorizer() returns SQLITE_DENY.|
+|SQLITE_FORMAT |Auxiliary database format error.|
+|SQLITE_RANGE |Second parameter to sqlite3_bind() out of range.|
+|SQLITE_NOTADB |File opened is not a SQLite database file.|
+|SQLITE_ROW |sqlite3_step() has another row ready.|
+|SQLITE_DONE |sqlite3_step() has finished executing.|
+
+
+### 繁忙情况处理
+有关处理查询的两个重要函数是sqlite3_busy_handle()和sqlite3_busy_timeout()。
+当调用需要获取锁的SQLiteAPI函数并且SQLite无法得到锁时，函数就会返回SQLITE_BUSY。
+处理这种情况方法有三种：
+ * 用户自己处理SQLITE_BUSY，并通过重新运行该语句，或采取一些其它方法。
+ * 让SQLite调用繁忙处理程序。
+ * 让SQLite等待(阻塞或睡眠)一段锁解锁的时间。
+  
+#### 用户自定义的繁忙处理
+第二个选项需要使用sqlite3_busy_handle()。该函数提供了调用用户自定义函数的方法，而不是立即去阻塞或者返回SQLITE_BUSY。
+```c
+int sqlite3_busy_handle(sqlite3*, int(*)(void*, int), void*);
+```
+**建议** todo：P197
+
+## 模式改变处理 Handling Schema Changes
+当连接更改了数据库模式，所有在改变发生前编译的准备语句都将失效。其结果是，这种语句的第一个sqlite3_step()调用将尝试重新编译有关SQL并尽可能正常运行。如果重新编译无法实现，则sqlite3_step()返回错误代码SQLITE_SCHEMA。从锁定的角度来看，模式更改发生的时间介于对编译语句sqlite3_prepare()调用和执行语句sqlite3_step()的调用之间。
+这种情况发生时，唯一的应对方法就是处理改变并重新开始。
+以下一些事件可能会导致SQLITE_SCHEMA错误：
+ * 分离数据库
+ * 修改或安装用户自定义的函数或聚合
+ * 修改或安装用户自定义排序
+ * 修改或安装授权函数
+ * 清理数据库空间
+  
+SQLITE_SCHEA情况催在的最总原因与VDBE有关。
+#### 追踪SQL TRACING SQL
+```c
+void *sqlite3_trace(sqlite3*， void(*xTrace)（void*， const char*), void*);
+```
+
