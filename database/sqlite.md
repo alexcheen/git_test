@@ -880,3 +880,58 @@ SQLITE_SCHEA情况催在的最总原因与VDBE有关。
 void *sqlite3_trace(sqlite3*， void(*xTrace)（void*， const char*), void*);
 ```
 
+## 操作控制 
+API提供了一些函数，可以在编译时和运行时监视和管理SQL命令。
+
+### 提交钩子
+```c
+void *sqlite3_commit_hook(sqlite3 *cnx,
+                        int(*xCallBack)(void *data),
+                        void *data);
+```
+当连接cnx上提交事务时将触发该回调函数。第三个参数时一个指向应用程序特定数据的指针，SQLite将该数据传递给回调函数，如果该回调函数返回非零值，提交将转换为回滚。
+在回调函数指针中传入NULL，可以有效地禁用当前注册函数。此外，给定的连接一次只能注册一个回调函数。
+
+### 回滚钩子
+```c
+void *sqlite3_rollback_hook(sqlite3 *cnx,
+                        int(*xCallBack)(void *data),
+                        void *data);
+```
+当连接cnx上的回滚事件触发回调函数，不管是通过显示的回滚命令、隐式错误还是违反约束导致的回滚。如果是由于数据库连接关闭导致的自动回滚，将无法出发回调函数。
+
+### 更新钩子
+函数sqlite3_update_hook()用于监视给定连接上对行的所有更新、插入和删除操作。
+```c
+void sqlite3_update_hook(
+        sqlite3 *cnx,
+        void(*)(void*, int, char const*, char const*, sqlite_int64),
+        void *data
+);
+```
+回调函数的形式
+```c
+void callback(
+        void *data,
+        int operation_code,
+        char const* db_name,
+        char const* table_name,
+        sqlite_int64 rowid
+);
+```
+### 授权函数
+```c
+int sqlite3_set_authorizer(
+        sqlite3*,
+        int (*xAuth)(void*, int, const char*, const char*, const char*, const char*),
+        void *pUserData
+);
+```
+```c
+int auth( void*, /* user data */
+        int, /* event code */
+        const char*, /* event specific */
+        const char*, /* event specific */
+        const char*, /* database name */
+        const char* /* trigger or view name */ );
+```
