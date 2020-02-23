@@ -935,3 +935,240 @@ int auth( void*, /* user data */
         const char*, /* database name */
         const char* /* trigger or view name */ );
 ```
+
+授权函数例子：
+ * 阻止读取列z
+ * 阻止更新列x
+ * 监控加载和分离数据库事件
+ * 记录数据库事件日志
+  
+```c
+int auth( void* x, int type,
+          const char* a, const char* b,
+          const char* c, const char* d )
+{
+    const char* operation = a;
+    printf( " %s ", event_description(type));
+/* Filter for different database events
+** from SQLITE_TRANSACTION to SQLITE_INSERT,
+** UPDATE, DELETE, ATTACH, etc. and either allow or deny
+** them.
+*/
+    if((a != NULL) && (type == SQLITE_TRANSACTION)) {
+        printf(": %s Transaction", operation);
+    }
+    switch(type) {
+    case SQLITE_CREATE_INDEX:
+    case SQLITE_CREATE_TABLE:
+    case SQLITE_CREATE_TRIGGER:
+    case SQLITE_CREATE_VIEW:
+    case SQLITE_DROP_INDEX:
+    case SQLITE_DROP_TABLE:
+    case SQLITE_DROP_TRIGGER:
+    case SQLITE_DROP_VIEW:
+        {
+            // Schema has been modified somehow.
+            printf(": Schema modified");
+        }
+    }
+    if(type == SQLITE_READ) {
+        printf(": Read of %s.%s ", a, b);
+        /* Block attempts to read column z */
+        if(strcmp(b,"z")==0) {
+            printf("-> DENIED\n");
+            return SQLITE_IGNORE;
+        }
+    }
+    if(type == SQLITE_INSERT) {
+        printf(": Insert records into %s ", a);
+    }
+
+    if(type == SQLITE_UPDATE) {
+        printf(": Update of %s.%s ", a, b);
+        /* Block updates of column x */
+        if(strcmp(b,"x")==0) {
+            printf("-> DENIED\n");
+            return SQLITE_IGNORE;
+        }
+    }
+    if(type == SQLITE_DELETE) {
+        printf(": Delete from %s ", a);
+    }
+    if(type == SQLITE_ATTACH) {
+        printf(": %s", a);
+    }
+    if(type == SQLITE_DETACH) {
+        printf("-> %s", a);
+    }
+    printf("\n");
+    return SQLITE_OK;
+}
+
+void print_sql_result(sqlite3 *db, char *sql)
+{
+    const char *tail;
+    sqlite3_stmt *stmt;
+    int i,ncols;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, &tail);
+    if(rc != SQLITE_OK) {
+        fprintf(stdout, "SQL error: %s\n", sqlite3_errmsg(db));
+    }
+    rc = sqlite3_step(stmt);
+    ncols = sqlite3_column_count(stmt);
+    if(rc == SQLITE_ROW)
+    {
+        for(i=0; i<ncols; i++)
+        {
+            fprintf(stdout, "Column: %s(%d/%s)\n",
+                    sqlite3_column_name(stmt,i),
+                    sqlite3_column_type(stmt, i),
+                    sqlite3_column_decltype(stmt,i));
+        }
+//        rc = sqlite3_step(stmt);
+    }
+    while(rc == SQLITE_ROW) {
+        fprintf(stdout, "Record: ");
+        for(i=0; i < ncols; i++) {
+            fprintf(stdout, "'%s' ", sqlite3_column_text(stmt, i));
+        }
+        fprintf(stdout, "\n");
+        rc = sqlite3_step(stmt);
+    }
+    sqlite3_finalize(stmt);
+}
+void test_2()
+{
+    sqlite3 *db, *db2;
+    char *zErr, *sql;
+    int rc;
+    /** Setup */
+    /* Connect to test.db */
+    rc = sqlite3_open("test.db", &db);
+    /** Authorize and test
+    /* 1. Register the authorizer function */
+    sqlite3_set_authorizer(db, auth, NULL);
+
+    /* 2. Test transactions events */
+    printf("program : Starting transaction\n");
+    sqlite3_exec(db, "BEGIN", NULL, NULL, &zErr);
+    printf("program : Committing transaction\n");
+    sqlite3_exec(db, "COMMIT", NULL, NULL, &zErr);
+
+    /* 3. Test table events */
+    printf("program : Creating table\n");
+    sqlite3_exec(db, "create table foo(x int, y int, z int)", NULL, NULL, &zErr);
+
+    /* 4. Test read/write access */
+    printf("program : Inserting record\n");
+    sqlite3_exec(db, "insert into foo values (1,2,3)", NULL, NULL, &zErr);
+    printf("program : Selecting record (value for z should be NULL)\n");
+    print_sql_result(db, "select * from foo");
+    printf("program : Updating record (update of x should be denied)\n");
+    sqlite3_exec(db, "update foo set x=4, y=5, z=6", NULL, NULL, &zErr);
+    printf("program : Selecting record (notice x was not updated)\n");
+    print_sql_result (db, "select * from foo");
+    printf("program : Deleting record\n");
+    sqlite3_exec(db, "delete from foo", NULL, NULL, &zErr);
+    printf("program : Dropping table\n");
+    sqlite3_exec(db, "drop table foo", NULL, NULL, &zErr);
+
+    /* 5. Test attach/detach */
+    /* Connect to test2.db */
+    rc = sqlite3_open("test2.db", &db2);
+    if(rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db2));
+        sqlite3_close(db2);
+        return;
+    }
+    sqlite3_exec(db2, "drop table foo2", NULL, NULL, &zErr);
+    sqlite3_exec(db2, "create table foo2(x int, y int, z int)", NULL, NULL, &zErr);
+    printf("program : Attaching database test2.db\n");
+    sqlite3_exec(db, "attach 'test2.db' as test2", NULL, NULL, &zErr);
+    printf("program : Selecting record from attached database test2.db\n");
+    sqlite3_exec(db, "select * from foo2", NULL, NULL, &zErr);
+    printf("program : Detaching table\n");
+    sqlite3_exec(db, "detach test2", NULL, NULL, &zErr);
+}
+```
+输出：
+第一段是 事务过滤器捕获事务状态的变化：
+```
+program : Starting transaction
+ type desc : BEGIN Transaction
+program : Committing transaction
+ type desc : COMMIT Transaction
+```
+第二段是 创建测试表导致的模式改变：
+```
+program : Creating table
+ type desc : Insert records into sqlite_master 
+ type desc : Schema modified
+ type desc : Update of sqlite_master.type 
+ type desc : Update of sqlite_master.name 
+ type desc : Update of sqlite_master.tbl_name 
+ type desc : Update of sqlite_master.rootpage 
+ type desc : Update of sqlite_master.sql 
+ type desc : Read of sqlite_master.ROWID 
+```
+下一步是插入一条记录，授权函数检测到变化：
+```
+program : Inserting record
+ type desc : Insert records into foo 
+```
+阻止单个列z的访问：
+```
+program : Selecting record (value for z should be NULL)
+ type desc 
+ type desc : Read of foo.x 
+ type desc : Read of foo.y 
+ type desc : Read of foo.z -> DENIED
+Column: x(1/int)
+Column: y(1/int)
+Column: z(5/(null))
+Record: '1' '2' '(null)' 
+```
+记录的更新，x更新的阻止：
+```
+program : Updating record (update of x should be denied)
+ type desc : Update of foo.x -> DENIED
+ type desc : Update of foo.y 
+ type desc : Update of foo.z 
+```
+查看下x是否更新：
+```
+program : Selecting record (notice x was not updated)
+ type desc 
+ type desc : Read of foo.x 
+ type desc : Read of foo.y 
+ type desc : Read of foo.z -> DENIED
+Column: x(1/int)
+Column: y(1/int)
+Column: z(5/(null))
+Record: '1' '5' '(null)' 
+```
+记录的删除，并删除表：
+```
+program : Deleting record
+ type desc : Delete from foo 
+program : Dropping table
+ type desc : Delete from sqlite_master 
+ type desc : Schema modified
+ type desc : Delete from foo 
+ type desc : Delete from sqlite_master 
+ type desc : Read of sqlite_master.tbl_name 
+ type desc : Read of sqlite_master.type 
+ type desc : Update of sqlite_master.rootpage 
+ type desc : Read of sqlite_master.rootpage 
+```
+授权函数报告发生在附加数据库的操作：
+```
+program : Attaching database test2.db
+ type desc : test2.db
+program : Selecting record from attached database test2.db
+ type desc 
+ type desc : Read of foo2.x 
+ type desc : Read of foo2.y 
+ type desc : Read of foo2.z -> DENIED
+program : Detaching table
+ type desc -> test2
+ ```
