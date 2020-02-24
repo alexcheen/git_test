@@ -943,6 +943,50 @@ int auth( void*, /* user data */
  * 记录数据库事件日志
   
 ```c
+const char event_desc[64];
+const char* event_description(int type)
+{
+    memset(event_desc,0x00,64);
+    switch(type)
+    {
+    case 1 : sprintf(event_desc,"SQLITE_CREATE_INDEX       ");break;
+    case 2 : sprintf(event_desc,"SQLITE_CREATE_TABLE       ");break;
+    case 3 : sprintf(event_desc,"SQLITE_CREATE_TEMP_INDEX  ");break;
+    case 4 : sprintf(event_desc,"SQLITE_CREATE_TEMP_TABLE  ");break;
+    case 5 : sprintf(event_desc,"SQLITE_CREATE_TEMP_TRIGGER");break;
+    case 6 : sprintf(event_desc,"SQLITE_CREATE_TEMP_VIEW   ");break;
+    case 7 : sprintf(event_desc,"SQLITE_CREATE_TRIGGER     ");break;
+    case 8 : sprintf(event_desc,"SQLITE_CREATE_VIEW        ");break;
+    case 9 : sprintf(event_desc,"SQLITE_DELETE             ");break;
+    case 10: sprintf(event_desc,"SQLITE_DROP_INDEX         ");break;
+    case 11: sprintf(event_desc,"SQLITE_DROP_TABLE         ");break;
+    case 12: sprintf(event_desc,"SQLITE_DROP_TEMP_INDEX    ");break;
+    case 13: sprintf(event_desc,"SQLITE_DROP_TEMP_TABLE    ");break;
+    case 14: sprintf(event_desc,"SQLITE_DROP_TEMP_TRIGGER  ");break;
+    case 15: sprintf(event_desc,"SQLITE_DROP_TEMP_VIEW     ");break;
+    case 16: sprintf(event_desc,"SQLITE_DROP_TRIGGER       ");break;
+    case 17: sprintf(event_desc,"SQLITE_DROP_VIEW          ");break;
+    case 18: sprintf(event_desc,"SQLITE_INSERT             ");break;
+    case 19: sprintf(event_desc,"SQLITE_PRAGMA             ");break;
+    case 20: sprintf(event_desc,"SQLITE_READ               ");break;
+    case 21: sprintf(event_desc,"SQLITE_SELECT             ");break;
+    case 22: sprintf(event_desc,"SQLITE_TRANSACTION        ");break;
+    case 23: sprintf(event_desc,"SQLITE_UPDATE             ");break;
+    case 24: sprintf(event_desc,"SQLITE_ATTACH             ");break;
+    case 25: sprintf(event_desc,"SQLITE_DETACH             ");break;
+    case 26: sprintf(event_desc,"SQLITE_ALTER_TABLE        ");break;
+    case 27: sprintf(event_desc,"SQLITE_REINDEX            ");break;
+    case 28: sprintf(event_desc,"SQLITE_ANALYZE            ");break;
+    case 29: sprintf(event_desc,"SQLITE_CREATE_VTABLE      ");break;
+    case 30: sprintf(event_desc,"SQLITE_DROP_VTABLE        ");break;
+    case 31: sprintf(event_desc,"SQLITE_FUNCTION           ");break;
+    case 32: sprintf(event_desc,"SQLITE_SAVEPOINT          ");break;
+    case 0 : sprintf(event_desc,"SQLITE_COPY               ");break;
+    case 33: sprintf(event_desc,"SQLITE_RECURSIVE          ");break;
+    default: sprintf(event_desc,"UNKOUWN EVENT");
+    }
+    return event_desc;
+}
 int auth( void* x, int type,
           const char* a, const char* b,
           const char* c, const char* d )
@@ -1094,81 +1138,292 @@ void test_2()
 第一段是 事务过滤器捕获事务状态的变化：
 ```
 program : Starting transaction
- type desc : BEGIN Transaction
+ SQLITE_TRANSACTION         : BEGIN Transaction
 program : Committing transaction
- type desc : COMMIT Transaction
+ SQLITE_TRANSACTION         : COMMIT Transaction
 ```
 第二段是 创建测试表导致的模式改变：
 ```
 program : Creating table
- type desc : Insert records into sqlite_master 
- type desc : Schema modified
- type desc : Update of sqlite_master.type 
- type desc : Update of sqlite_master.name 
- type desc : Update of sqlite_master.tbl_name 
- type desc : Update of sqlite_master.rootpage 
- type desc : Update of sqlite_master.sql 
- type desc : Read of sqlite_master.ROWID 
+ SQLITE_INSERT              : Insert records into sqlite_master 
+ SQLITE_CREATE_TABLE        : Schema modified
+ SQLITE_UPDATE              : Update of sqlite_master.type 
+ SQLITE_UPDATE              : Update of sqlite_master.name 
+ SQLITE_UPDATE              : Update of sqlite_master.tbl_name 
+ SQLITE_UPDATE              : Update of sqlite_master.rootpage 
+ SQLITE_UPDATE              : Update of sqlite_master.sql 
+ SQLITE_READ                : Read of sqlite_master.ROWID 
 ```
 下一步是插入一条记录，授权函数检测到变化：
 ```
 program : Inserting record
- type desc : Insert records into foo 
+ SQLITE_INSERT              : Insert records into foo 
 ```
 阻止单个列z的访问：
 ```
 program : Selecting record (value for z should be NULL)
- type desc 
- type desc : Read of foo.x 
- type desc : Read of foo.y 
- type desc : Read of foo.z -> DENIED
+ SQLITE_SELECT              
+ SQLITE_READ                : Read of foo.x 
+ SQLITE_READ                : Read of foo.y 
+ SQLITE_READ                : Read of foo.z -> DENIED
 Column: x(1/int)
 Column: y(1/int)
 Column: z(5/(null))
-Record: '1' '2' '(null)' 
+Record: '1' '2' '(null)'  
 ```
 记录的更新，x更新的阻止：
 ```
 program : Updating record (update of x should be denied)
- type desc : Update of foo.x -> DENIED
- type desc : Update of foo.y 
- type desc : Update of foo.z 
+ SQLITE_UPDATE              : Update of foo.x -> DENIED
+ SQLITE_UPDATE              : Update of foo.y 
+ SQLITE_UPDATE              : Update of foo.z 
 ```
 查看下x是否更新：
 ```
 program : Selecting record (notice x was not updated)
- type desc 
- type desc : Read of foo.x 
- type desc : Read of foo.y 
- type desc : Read of foo.z -> DENIED
+ SQLITE_SELECT              
+ SQLITE_READ                : Read of foo.x 
+ SQLITE_READ                : Read of foo.y 
+ SQLITE_READ                : Read of foo.z -> DENIED
 Column: x(1/int)
 Column: y(1/int)
 Column: z(5/(null))
-Record: '1' '5' '(null)' 
+Record: '1' '5' '(null)'  
 ```
 记录的删除，并删除表：
 ```
 program : Deleting record
- type desc : Delete from foo 
+ SQLITE_DELETE              : Delete from foo 
 program : Dropping table
- type desc : Delete from sqlite_master 
- type desc : Schema modified
- type desc : Delete from foo 
- type desc : Delete from sqlite_master 
- type desc : Read of sqlite_master.tbl_name 
- type desc : Read of sqlite_master.type 
- type desc : Update of sqlite_master.rootpage 
- type desc : Read of sqlite_master.rootpage 
+ SQLITE_DELETE              : Delete from sqlite_master 
+ SQLITE_DROP_TABLE          : Schema modified
+ SQLITE_DELETE              : Delete from foo 
+ SQLITE_DELETE              : Delete from sqlite_master 
+ SQLITE_READ                : Read of sqlite_master.tbl_name 
+ SQLITE_READ                : Read of sqlite_master.type 
+ SQLITE_UPDATE              : Update of sqlite_master.rootpage 
+ SQLITE_READ                : Read of sqlite_master.rootpage  
 ```
 授权函数报告发生在附加数据库的操作：
 ```
 program : Attaching database test2.db
- type desc : test2.db
+ SQLITE_ATTACH              : test2.db
 program : Selecting record from attached database test2.db
- type desc 
- type desc : Read of foo2.x 
- type desc : Read of foo2.y 
- type desc : Read of foo2.z -> DENIED
+ SQLITE_SELECT              
+ SQLITE_READ                : Read of foo2.x 
+ SQLITE_READ                : Read of foo2.y 
+ SQLITE_READ                : Read of foo2.z -> DENIED
 program : Detaching table
- type desc -> test2
+ SQLITE_DETACH              -> test2
  ```
+
+# 扩展 C API
+
+### 注册函数
+```c
+int sqlite3_create_function(
+        sqlite3 *cnx, /* connection handle */
+        const char *zFunctionName, /* function/aggregate name in SQL */
+        int nArg, /* number of arguments. -1 = unlimited. */
+        int eTextRep, /* encoding (UTF8, 16, etc.) */
+        void *pUserData, /* application data, passed to callback */
+        void (*xFunc)(sqlite3_context*,int,sqlite3_value**),
+        void (*xStep)(sqlite3_context*,int,sqlite3_value**),
+        void (*xFinal)(sqlite3_context*)
+);
+```
+### 步骤函数
+函数（☞指自定义函数的回调函数）和聚合的步骤函数时一样的，声明如下：
+```c
+void fn(sqlite3_context* ctx, int nargs, sqlite3_value** values);
+```
+参数ctx是函数/聚合的上下文环境。它保持特殊函数的实例状态，通过它可以获得sqlite3_create_function()提供的应用程序数据参数(pUserData)。可以使用sqlite3_user_data()获取用户数据。
+```c
+void *sqlite3_user_data(sqlite3_context*);
+```
+对函数而言，这些数据可以在所有的调用中共享。因此，对函数调用的特定实例而言，同样的pUserData可以在给定函数的所有实例中传递或共享。但聚合可以通过sqlite3_aggregate_context()为每个特定的实例分配状态。
+```c
+void *sqlite3_aggregate_context(sqlite3_context*, int nBytes);
+```
+### 返回值
+参数values是sqlite3_value_xxx()结构体数组，是SQLite实际参数值的句柄。这些值的实际数据可以使用sqlite3_value_xxx()系列获得。
+获取标量值的函数形式
+```c
+int sqlite3_value_int(sqlite3_value*);
+sqlite3_int64 sqlite3_value_int64(sqlite3_value*);
+double sqlite3_value_double(sqlite3_value*);
+```
+获取标量值的函数形式
+```c
+int sqlite3_value_bytes(sqlite3_value*);
+const void *sqlite3_value_blob(sqlite3_value*);
+const unsigned char *sqlite3_value_text(sqlite3_value*);
+```
+## 函数
+示例代码
+```c
+void trace_cb(int T, void* C, void *P, void *X)
+{
+    switch(T)
+    {
+        case SQLITE_TRACE_ROW: fprintf(stdout, "SQLITE_TRACE_ROW :");break;
+        case SQLITE_TRACE_STMT: fprintf(stdout, "SQLITE_TRACE_STMT :");break;
+        case SQLITE_TRACE_CLOSE: fprintf(stdout, "SQLITE_TRACE_CLOSE :");break;
+        case SQLITE_TRACE_PROFILE: fprintf(stdout, "SQLITE_TRACE_PROFILE :");break;
+        default: fprintf(stdout, "UNKOUWN TRACE MODE!!");return;
+    }
+    fprintf(stdout,"context:%s\n", (char*)C);
+    fprintf(stdout, "P-X: %s-%s\n",(char*)P, (char*)X);
+}
+void log_sql(sqlite3 *db, int flag)
+{
+    sqlite3_trace_v2(db,flag,trace_cb,NULL);
+    SQLITE_TRACE_ROW;
+}
+void hello_newman(sqlite3_context* ctx, int nargs, sqlite3_value** values)
+{
+    const char *msg;
+    /* Generate Newman's reply */
+    msg = sqlite3_mprintf("Hello %s", sqlite3_value_text(values[0]));
+    /* Set the return value. Have sqlite clean up msg w/ sqlite_free(). */
+    sqlite3_result_text(ctx, msg, strlen(msg), sqlite3_free);
+}
+void test_3()
+{
+    int rc; sqlite3 *db;
+    sqlite3_open("test.db", &db);
+    sqlite3_create_function( db, "hello_newman", 1, SQLITE_UTF8, NULL,
+    hello_newman, NULL, NULL);
+    /* Log SQL as it is executed. */
+    log_sql(db,1);
+    /* Call function with one text argument. */
+    fprintf(stdout, "Calling with one argument.\n");
+    print_sql_result(db, "select hello_newman('Jerry')");
+    /* Call function with two arguments.
+    ** It will fail as we registered the function as taking only one argument.*/
+    fprintf(stdout, "\nCalling with two arguments.\n");
+    print_sql_result(db, "select hello_newman ('Jerry', 'Elaine')");
+    /* Call function with no arguments. This will fail too */
+    fprintf(stdout, "\nCalling with no arguments.\n");
+    print_sql_result(db, "select hello_newman()");
+    /* Done */
+    sqlite3_close(db);
+    return ;
+}
+```
+以上程序输出：
+```
+Calling with one argument.
+SQLITE_TRACE_STMT :context:(null)
+P-X: -select hello_newman('Jerry')
+Column: hello_newman('Jerry')(3/(null))
+Record: 'Hello Jerry' 
+
+Calling with two arguments.
+SQL error: wrong number of arguments to function hello_newman()
+
+Calling with no arguments.
+SQL error: wrong number of arguments to function hello_newman()
+```
+### 返回值
+hello_newman()引入新的函数sqlite3_result_text()。
+该系列函数是用来为用户自定义函数和聚合返回值的。
+标量函数如下:
+```c
+void sqlite3_result_double(sqlite3_context*, double);
+void sqlite3_result_int(sqlite3_context*, int);
+void sqlite3_result_int64(sqlite3_context*, long long int);
+void sqlite3_result_null(sqlite3_context*);
+```
+数组函数如下：
+```c
+void sqlite3_result_text(sqlite3_context*, const char*, int n, void(*)(void*));
+void sqlite3_result_blob(sqlite3_context*, const void*, int n, void(*)(void*));
+```
+
+### 数组与内存清理器
+                             
+三种形式
+```c
+#define SQLITE_STATIC ((void(*)(void *))0)
+#define SQLITE_TRANSIENT ((void(*)(void *))-1)
+void cleanup（void*);
+```
+## 聚合
+
+
+```c
+typedef struct SAggCtx SAggCtx;
+struct SAggCtx {
+    int chrCnt;
+    char *result;
+};
+void str_agg_step(sqlite3_context* ctx, int ncols, sqlite3_value** values)
+{
+    fprintf(stdout,"======in step======\n");
+    SAggCtx *p = (SAggCtx *) sqlite3_aggregate_context(ctx, sizeof(*p));
+    static const char delim [] = ", ";
+    char *txt = sqlite3_value_text(values[0]);
+
+    fprintf(stdout,"step txt:%s\n",txt);
+    int len = strlen(txt);
+    if (!p->result) {
+        p->result = sqlite3_malloc(len + 1);
+        memcpy(p->result, txt, len + 1);
+        p->chrCnt = len;
+    }
+    else
+    {
+        const int delimLen = sizeof(delim)-1;
+        fprintf(stdout,"before:%s, len=%d.\n", p->result,p->chrCnt);
+        p->result = sqlite3_realloc(p->result, p->chrCnt + len + delimLen + 1);
+
+        memcpy(p->result + p->chrCnt, delim, delimLen);
+        p->chrCnt += delimLen;
+        memcpy(p->result + p->chrCnt, txt, len + 1);
+        p->chrCnt += len;
+        fprintf(stdout,"after:%s, len=%d.\n", p->result,p->chrCnt);
+    }
+    fprintf(stdout,"step arg_txt:%s, len:%d\n",p->result, p->chrCnt);
+}
+void str_agg_finalize(sqlite3_context* ctx)
+{
+    fprintf(stdout,"======in finalize======\n");
+    SAggCtx *p = (SAggCtx *) sqlite3_aggregate_context(ctx, sizeof(*p));
+    if( p && p->result )
+        sqlite3_result_text(ctx, p->result, p->chrCnt, sqlite3_free);
+}
+void test_4()
+{
+    int rc; sqlite3 *db; char *sql;
+    sqlite3_open("foods.db", &db);
+    /* Register aggregate. */
+    fprintf(stdout, "Registering aggregate str_agg()\n");
+    /* Turn SQL tracing on. */
+    log_sql(db, 1);
+    /* Register aggregate. */
+    sqlite3_create_function( db, "str_agg", 2, SQLITE_UTF8, db, NULL, str_agg_step, str_agg_finalize);
+    /* Test. */
+    fprintf(stdout, "\nRunning query: \n");
+    sql = "select season, str_agg(name, ',') from episodes group by season";
+    print_sql_result(db, sql);
+    sqlite3_close(db);
+    return ;
+
+}
+```
+输出：
+```
+Registering aggregate str_agg()
+
+Running query: 
+SQLITE_TRACE_STMT :context:(null)
+P-X: -select season, str_agg(name, ',') from episodes group by season
+Column: season(1/INTEGER)
+Column: str_agg(name, ',')(3/(null))
+Record: '1' 'name01, ' 
+Record: '2' 'name02, ' 
+Record: '3' 'name03, ' 
+Record: '4' 'name04, ' 
+```
+
