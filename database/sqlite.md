@@ -1427,3 +1427,8 @@ Record: '3' 'name03, '
 Record: '4' 'name04, ' 
 ```
 
+# SQLite 内部机制及新特性
+内容简介：SQLite预写日志模型，pager和B-tree的运行机制，SQLite的基本数据类型、亲缘性以及类型处理方法。
+
+## B-tree和Pager模块
+B-tree为SQLite VDBE提供O(logN)级时间复杂度的查询和插入，通过双向遍历记录实现O(1)级时间复杂度的删除。
