@@ -1479,3 +1479,130 @@ sqlite> SELECT * FROM episodes ORDER BY id LIMIT 1;
 
 记录头的长度是4B，从头的大小可以看出，其本身采用单字节编码。第一个类型对应id域，为1B的有符号整数。第二个类型域对应season域，同样也是1B的有符号整数。那么域类型标识是一个奇数，表明该域数据为为文本(text)类型值。name域的大小为(49-13)/2=18B。
 
+### 层次化数据组织
+
+![对象模型](../images/sqlite_mode.PNG)
+
+具体的数据单元由堆栈中的各模块处理。自上而下，数据变得精确、详细。
+C API负责处理域值，VDBE负责处理记录，B-tree负责处理键值和数据，pager负责处理页，操作系统接口负责处理二进制数据和原始数据存储。
+每个模块负责维护自身在数据库中对应的数据部分，然后依靠底层提供所需的信息的初始数据，并从中提取需要的内容。
+
+### 页面溢出
+有效载荷及其内容可有不同的大小。然而页面的大小是固定的。此时额外的有效载荷将添加到溢出页面的链接链表上。如果blob字段太大，可以考虑创建外部文件来存储blob数据，并将外部文件名保存在记录中。
+
+### B-tree API
+了解这些API有助于理解SQLite的内部机制。
+B-tree模块的另一个优点是本身支持事务机制、pager处理事务、锁以及日志文件，并为B-tree模块提供支持。B-tree API根据目的大体分为以下函数。
+1. 存取及事务函数。
+ * sqlite3BtreeOpen: Opens a new database file. Returns a B-tree object.
+ * sqlite3BtreeClose: Closes a database.
+ * sqlite3BtreeBeginTrans: Starts a new transaction.
+ * sqlite3BtreeCommit: Commits the current transaction.
+ * sqlite3BtreeRollback: Rolls back the current transaction.
+ * sqlite3BtreeBeginStmt: Starts a statement transaction.
+ * sqlite3BtreeCommitStmt: Commits a statement transaction.
+ * sqlite3BtreeRollbackStmtsqlite3BtreeRollbackStmt: Rolls back a statement transaction.
+ 2. 表函数
+ * sqlite3BtreeCreateTable: Creates a new, empty B-tree in a database file. Flags in the argument determine whether to use a table format (B+tree) or index format (B-tree).
+ * sqlite3BtreeDropTable: Destroys a B-tree in a database file.
+ * sqlite3BtreeClearTable: Removes all data from a B-tree but keeps the B-tree intact.
+ 3. 游标函数
+ * sqlite3BtreeCursor: Creates a new cursor pointing to a particular B-tree. Cursors can be either a read cursor or a write cursor. Read and write cursors may not exist in the same B-tree at the same time.
+ * sqlite3BtreeCloseCursor: Closes the B-tree cursor.
+ * sqlite3BtreeFirst: Moves the cursor to the first element in a B-tree.
+ * sqlite3BtreeLast: Moves the cursor to the last element in a B-tree.
+ * sqlite3BtreeNext: Moves the cursor to the next element after the one it is currently pointing to.
+ * sqlite3BtreePrevious: Moves the cursor to the previous element before the one it is currently pointing to.
+ * sqlite3BtreeMoveto: Moves the cursor to an element that matches the key value passed in as a parameter. If there is no match, leaves the cursor pointing to an element that would be on either side of the matching element, had it existed.
+ 4. 记录函数
+ * sqlite3BtreeDelete: Deletes the record to which the cursor is pointing
+ * sqlite3BtreeInsert: Inserts a new element in the appropriate place of the B-tree
+ * sqlite3BtreeKeySize: Returns the number of bytes in the key of the record to which the cursor is pointing
+ * sqlite3BtreeKey: Returns the key of the record to which the cursor is currently pointing
+ * sqlite3BtreeDataSize: Returns the number of bytes in the data record to which the cursor is currently pointing
+ * sqlite3BtreeData: Returns the data in the record to which the cursor is currently pointing
+ 5. 配置管理函数
+ * sqlite3BtreeSetCacheSize: Controls the page cache size as well as the synchronous writes (as defined in the synchronous pragma).
+ * sqlite3BtreeSetSafetyLevel: Changes the way data is synced to disk in order to increase or decrease how well the database resists damage because of OS crashes and power failures. Level 1 is the same as asynchronous (no syncs() occur, and there is a high probability of damage). This is the equivalent to pragma synchronous=OFF. Level 2 is the default. There is a very low but nonzero probability of damage. This is the equivalent to pragma synchronous=NORMAL. Level 3 reduces the probability of damage to near zero but with a write performance reduction. This is the equivalent to pragma synchronous=FULL.
+ * sqlite3BtreeSetPageSize: Sets the database page size.
+ * sqlite3BtreeGetPageSize: Returns the database page size.
+ * sqlite3BtreeSetAutoVacuum: Sets the autovacuum property of the database.
+ * sqlite3BtreeGetAutoVacuum: Returns whether the database uses autovacuum.
+ * sqlite3BtreeSetBusyHandler: Sets the busy handler.
+
+ ## 显示类型、存储类型以及亲缘性介绍
+
+ ### 显示类型
+ Sqlite支持显示类型。在编程语言中，显式类型就是如何定义或决定一个变量或值。
+ 有如下两种解释：
+  * 显式类型是值变量的类型必须在代码中显示地声明。(MT1)
+  * 显示类型是指变量完全无类型，而只有值有类型。(MT2)
+SQLite的方式兼用了二者，实为(MT3)。
+
+### 亲缘性
+
+```sql
+sqlite> create table domain(i int, n numeric, t text, b blob);
+sqlite> insert into domain values (3.142,3.142,3.142,3.142);
+sqlite> insert into domain values ('3.142','3.142','3.142','3.142');
+sqlite> insert into domain values (3142,3142,3142,3142);
+sqlite> insert into domain values (x'3142',x'3142',x'3142',x'3142');
+sqlite> insert into domain values (null,null,null,null);
+sqlite> select rowid,typeof(i),typeof(n),typeof(t),typeof(b) from domain;
+```
+|rowid |typeof(i) |typeof(n) |typeof(t) |typeof(b)|
+|-|-|-|-|-|
+|1 |real |real |text |real|
+|2 |real |real |text |text|
+|3 |integer |integer |text |integer|
+|4 |blob |blob |blob |blob|
+|5 |null |null |null |null|
+
+###  临时类型限制
+为了域完整性，需要有比类型亲缘性更强的手段。通过CHECK约束提供的支持来进行限制。
+```sql
+sqlite> create table domain (x integer check(typeof(x)='integer'));
+sqlite> insert into domain value('1');
+SQL error: constraint failed
+
+sqlite> insert into domain value(1.1);
+SQL error: constraint failed
+
+sqlite> isnert into domain value(1);
+SQL OK
+```
+
+## 预写日志
+SQLite 3.7.0引入了新的可选管理原子事务的模式：预写日志。
+预写日志(Write Ahead Log, WAL)，进一步增强SQLite和数据库的精密性与鲁棒性，其次代码和二进制文件依然紧凑和简洁。
+([SQLite WAL](https://www.sqlite.org/wal.html))
+![对象模型](../images/vfs1.gif)
+
+### WAL工作原理
+传统操作模式，SQLite使用回滚日志，从SQL状态集中捕获预修改数据，然后修改数据库文件。
+使用WAL时，将反过来处理。取代写入原始信息模式，预修改数据放入回滚日志，利用WAL放弃原始未关联数据库文件的数据。
+> WAL 的中心思想是对数据文件的修改（它们是表和索引的载体）必须是只能发生在这些修改已经记录了日志之后， 也就是说，在描述这些变化的日志记录冲刷到永久存储器之后。
+
+优势：
+ * WAL is significantly faster in most scenarios.
+ * WAL provides more concurrency as readers do not block writers and a writer does not block readers. Reading and writing can proceed concurrently.
+ * Disk I/O operations tends to be more sequential using WAL.
+ * WAL uses many fewer fsync() operations and is thus less vulnerable to problems on systems where the fsync() system call is broken.
+
+#### 检查点 checkpoint
+WAL使用检查点函数将修改写回数据库。这个处理自动进行，所有开发真无需关注自己如何管理检查点和数据库的协会处理。默认情况下，当WAL文件发现有1000页修改时，将调用检查点。修改检查点执行标准的参数以适应不同的操作场合。
+#### 并发 concurrency
+
+访问一个数据页，读操作采用WAL索引结构来扫描WAL文件，以确定修改页是否存在。WAL索引结构在共享内存中实现，意味着所有的线程和进程必须访问相同的内存空间。
+也就是说操作无法访问像NFS类的网络文件系统。
+受益于WAL文件序列化属性，可以简单地将修改添加到文件末端。但必须轮流添加修改，故写操作时阻塞型写。
+
+### 激活和配置WAL
+
+```sql
+sqlite> PRAGMA journal_mode=WAL
+wal
+```
+如果返回'wal'，设置WAL模式成功。 如果底层主机不支持必要的共享内存要求，日志模式不会改变，命令返回的字符串为'delete'.
+
+
