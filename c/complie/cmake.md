@@ -1,6 +1,31 @@
 
 
 ## Concepts
+CMakeList.txt，默认执行该目录下的此文件，如果没有则报错。
+
+### Minimum CMake version
+最低CMake版本
+```cmake
+cmake_minimum_required(VERSION 3.5)
+```
+### Projects
+```cmake
+project (hello_cmake)
+```
+该命令会创建一个变量${PROJECT_NAME} 值为hello_cmake。
+
+### Creating an Executable
+```cmake
+add_executable(hello_cmake main.cpp)
+add_executable(${PROJECT_NAME} main.cpp)
+```
+上面两条命令等价。
+
+## Building
+```shell
+cmake
+make
+```
 ### Directory Paths
 
 |Variable	|Info|
