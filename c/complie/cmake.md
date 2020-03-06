@@ -51,3 +51,38 @@ file(GLOB SOURCES "src/*.cpp")
 
 ### Including Directories
 
+```cmake
+target_include_directories(target
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+)
+```
+### Building the Example
+```
+make
+or
+make VERBOSE=1
+```
+
+### Adding a Static Library
+```cmake
+add_library(hello_library STATIC
+    src/Hello.cpp
+)
+```
+This will be used to create a static library with the name libhello_library.a with the sources in the add_library call.
+
+### Populating Including Directories
+```cmake
+target_include_directories(hello_library
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+)
+```
+### Linking a Library
+```cmake
+add_executable(hello_library
+    src/main.cpp
+)
+```
+target_link_libraries(hello_binary)
