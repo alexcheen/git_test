@@ -149,3 +149,60 @@ target_compile_features(hello_cpp11 PUBLIC cxx_auto_type)
 message("list of compile features: ${CMAKE_CXX_COMPILE_FEATURES}")
 ```
 ### sublibrary
+```shell
+$ tree
+.
+├── CMakeLists.txt
+├── subbinary
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── sublibrary1
+│   ├── CMakeLists.txt
+│   ├── include
+│   │   └── sublib1
+│   │       └── sublib1.h
+│   └── src
+│       └── sublib1.cpp
+└── sublibrary2
+    ├── CMakeLists.txt
+    └── include
+        └── sublib2
+            └── sublib2.h
+```
+
+```cmake
+# Top level CMakeLists.txt
+cmake_minimum_required(VERSION 3.5)
+
+project(subprojects)
+
+add_subdirectory(sublibrary1)
+add_subdirectory(sublibrary2)
+add_subdirectory(sublibrary)
+
+# make executable
+project(sublibrary)
+add_executable(${PROJECET_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME}
+    sub::lib1
+    sub::lib2
+)
+
+# make a static library
+project(sublibrary1)
+add_library(${PROJECT_NAME} src/sublib1.cpp)
+add_library(sub::lib1 ALIAS ${PROJECT_NAME})
+
+target_include_directories(${PROJCET_NAME}
+    PUBLIC ${PROJECT_SOURCE_DIR}/include
+)
+
+# setup header only library
+project(sublibrary2)
+add_library(${PROJECT_NAME} INTERFACE)
+add_library(sub::lib2 ALIAS ${PROJECT_NAME})
+target_include_directories(${PROJECT_NAME}
+    INTERFACE
+        ${PROJECT_SOURCE_DIR}/include
+)
+```
