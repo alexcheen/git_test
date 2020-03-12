@@ -35,6 +35,7 @@ make
 |CMAKE_CURRENT_BINARY_DIR |The build directory you are currently in.|
 |PROJECT_BINARY_DIR |The build directory for the current project.|
 
+这里cmake系统会同时预定义PROJECT_BINARY_DIR和PROJECT_SOURCE_DIR变量，其值分别与<project_name>_BINARY_DIR和<project_name>_SOURCE_DIR变量一致。
 ```cmake
 set(SOURCES
     src/Hello.cpp
