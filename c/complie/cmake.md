@@ -207,3 +207,67 @@ target_include_directories(${PROJECT_NAME}
         ${PROJECT_SOURCE_DIR}/include
 )
 ```
+
+### static library and shared library
+目录树：
+```shell
+├── CMakeLists.txt
+└── lib
+    ├── CMakeLists.txt
+    ├── hello.c
+    └── hello.h
+```
+```cmake
+# CMakeLists.txt
+project(hellolib)
+add_sublibrary(lib)
+```
+```cmake
+# lib/CMakeLists.txt
+set(HELLO_SRC hello.c)
+add_library(hello SHARED ${HELLO_SRC})
+set_target_properties(hello PROPERTIES VERSION 1.2 SOVERSION 1)
+#error :duplicate name
+#add_library(hello STATIC ${HELLO_SRC})
+add_library(hello_static STATIC ${HELLO_SRC})
+set_target_properties(hello_static PROPERTIES CLEAN_DIRECT_OUTPUT 1 OUTPUT_NAME "hello")
+
+install(TARGETS hello hello_static
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib)
+install(FILES hello.h DESTINATION include/hello)
+```
+对于测试工程：
+```cmake
+project(demo)
+add_executable(demo main.c)
+# eq: -L/usr/include/hello
+INCLUDE_DIRECTORIES(/usr/include/hello)
+# eq: -lhello
+TARGET_LINK_LIBRARIES(demo hello)
+```
+### FIND INSTRUCTION 
+```cmake
+FIND_FILE(<VAR> name1 path1 path2 ...)
+
+FIND_LIBRARY(<VAR> name1 path1 path2 ...)
+
+FIND_PATH(<VAR> name1 path1 path2 ...)
+
+FIND_PROGRAM(<VAR> name1 path1 path2 ...)
+
+FIND_PACKAGE(<name> [major.minor] [QUIET] [NO_MODULE] [[REQUIRED|COMPONENTS] [componets...]])
+```
+
+```cmake
+#find_library demo
+FIND_LIBRARY(libX X11 /usr/lib)
+IF(NOT libX)
+MESSAGE(FATAL_ERROR "libX not found")
+ENDIF(NOT libX)
+
+#if SET(CMAKE_ALLOW_LOOSE_LOOP_CONSTGRUCTS ON)
+IF(WIN32)
+ELSE()
+ENDIF()
+```
