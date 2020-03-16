@@ -271,3 +271,11 @@ IF(WIN32)
 ELSE()
 ENDIF()
 ```
+CMake接受其他值作为add_library的第二个参数的有效值:
+ * STATIC：用于创建静态库，即编译文件的打包存档，以便在链接其他目标时使用，例如：可执行文件。
+
+ * SHARED：用于创建动态库，即可以动态链接，并在运行时加载的库。可以在CMakeLists.txt中使用`add_library(message SHARED Message.hpp Message.cpp) `从静态库切换到动态共享对象(DSO)。
+
+ * OBJECT：可将给定add_library的列表中的源码编译到目标文件，不将它们归档到静态库中，也不能将它们链接到共享对象中。如果需要一次性创建静态库和动态库，那么使用对象库尤其有用。我们将在本示例中演示。
+
+ * MODULE：又为DSO组。与SHARED库不同，它们不链接到项目中的任何目标，不过可以进行动态加载。该参数可以用于构建运行时插件。
