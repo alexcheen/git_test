@@ -279,3 +279,43 @@ CMake接受其他值作为add_library的第二个参数的有效值:
  * OBJECT：可将给定add_library的列表中的源码编译到目标文件，不将它们归档到静态库中，也不能将它们链接到共享对象中。如果需要一次性创建静态库和动态库，那么使用对象库尤其有用。我们将在本示例中演示。
 
  * MODULE：又为DSO组。与SHARED库不同，它们不链接到项目中的任何目标，不过可以进行动态加载。该参数可以用于构建运行时插件。
+
+需要保证编译的目标文件与生成位置无关。可以通过使用set_target_properties命令，设置message-objs目标的相应属性来实现。
+```cmake
+set_target_properties(message-objs
+    PROPERTIES
+        POSITION_INDEPENDENT_CODE 1
+    )
+​
+add_library(message-shared
+    SHARED
+        $<TARGET_OBJECTS:message-objs>
+    )
+​
+add_library(message-static
+    STATIC
+        $<TARGET_OBJECTS:message-objs>
+    )
+```
+生成同名的静态库与动态库
+```cmake
+add_library(message-shared
+  SHARED
+    $<TARGET_OBJECTS:message-objs>
+    )
+​
+set_target_properties(message-shared
+    PROPERTIES
+        OUTPUT_NAME "message"
+    )
+​
+add_library(message-static
+    STATIC
+        $<TARGET_OBJECTS:message-objs>
+    )
+​
+set_target_properties(message-static
+    PROPERTIES
+        OUTPUT_NAME "message"
+    )
+```
