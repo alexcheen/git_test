@@ -360,3 +360,116 @@ option(USE_LIBRARY "Compile sources into a library" OFF)
 ```shell
 cmake -D USE_LIBRARY=ON ..
 ```
+## 指定编译器
+
+## 切换构建类型
+cmake可以配置构建类型，CMAKE_BUILD_TYPE:
+  * Debug: 用于在没有优化的情况下，使用带有调试符构建库或可执行文件。
+  * Release: 构建优化的库或可执行文件，不包含调试符号。
+  * RelWithDebInfo: 构建较少的优化库或可执行文件，并包含调试符号。
+  * MinSizeRel： 用于不增加目标代码大小的优化方式，来构建库或可执行文件。
+  
+```cmake
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+project(recipe07 LANGUAGES C CXX)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Realse CACHE STRING "Build type" FORCE)
+endif()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+```
+```shell
+# build type in default Release
+mkdir -p build
+cd build
+cmake ..
+
+# build type in debug mode
+cmake -D CMAKE_BUILD_TYPE=Debug ..
+```
+当评估编译器优化级别的效果时，Release和Debug配置中构建项目非常有用。
+Cmake也支持符合配置生成器。
+```shell
+mkdir -p build
+cd build
+cmake .. -G"Visual Studio 12 2017 Win64" -D CMAKE_CONFIGURATION_TYPE="Release;Debug"
+```
+构建时来决定构建其中哪一个：
+```shell
+cmake --build . --config Release
+```
+## 设置编译器选项
+
+```cmake 
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+project(recipe-08 LANGUAGES CXX)
+message("C++ compiler flags: ${CMAKE_CXX_FLAGS}")
+list(APPEND flags "-fPIC" "-Wall")
+if(NOT WIN32)
+  list(APPEND flags "-Wextra" "-Wpedantic")
+endif()
+add_library(geometry
+  STATIC
+    geometry_circle.cpp
+    geometry_circle.hpp
+    geometry_polygon.cpp
+    geometry_polygon.hpp
+    geometry_rhombus.cpp
+    geometry_rhombus.hpp
+    geometry_square.cpp
+    geometry_square.hpp
+  )
+target_compile_options(geometry
+  PRIVATE
+    ${flags}
+)
+add_executable(compute-areas compute-areas.cpp)
+target_compile_options(compute-areas
+  PRIVATE
+    "-fPIC"
+)
+target_link_libraries(compute-areas geometry)
+```
+
+编译选项
+ * -Wall 选项意思是编译后显示所有警告。
+ * -fPIC 产生与位置无关代码(Position-Independent Code)
+ * -Wextra 打印一些额外的警告信息
+ * -Wpedantic 允许发出ANSI C标准所列的全部警告信息
+ * -fno-rtti 禁用RTTI
+ * -fno-exception 禁用异常
+ * -Wsuggest-final-types (GNU)
+ * -Wsuggest-final-methods (GNU)
+ * -Wsuggest-override (GNU)
+ * -03 优化级别
+ * -Wno-unused 禁用未使用警告
+
+控制编译器标志的第二种方法：
+```shell
+cmake -D CMAKE_CXX_FLAGS="-fno-exceptions -fno-rtti" ..
+```
+
+```camke
+set(COMPILER_FLAGS)
+set(COMPILER_FLAGS_DEBUG)
+set(COMPILER_FLAGS_RELEASE)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES GNU)
+  list(APPEND CXX_FLAGS "-fno-rtti" "-fno-exceptions")
+  list(APPEND CXX_FLAGS_DEBUG "-Wsuggest-final-types" "-Wsuggest-final-methods" "-Wsuggest-override")
+  list(APPEND CXX_FLAGS_RELEASE "-O3" "-Wno-unused")
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
+  list(APPEND CXX_FLAGS "-fno-rtti" "-fno-exceptions" "-Qunused-arguments" "-fcolor-diagnostics")
+  list(APPEND CXX_FLAGS_DEBUG "-Wdocumentation")
+  list(APPEND CXX_FLAGS_RELEASE "-O3" "-Wno-unused")
+endif()
+
+#使用生成器表达式来设置编译器标志的基础上，为每个配置和每个目标生成构建系统
+target_compile_option(compute-areas
+  PRIVATE
+    ${CXX_FLAGS}
+    "$<$<CONFIG:Debug>:${CXX_FLAGS_DEBUG}>"
+    "$<$<CONFIG:Release>:${CXX_FLAGS_RELEASE}>"
+  )
+```
