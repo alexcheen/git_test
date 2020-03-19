@@ -473,3 +473,18 @@ target_compile_option(compute-areas
     "$<$<CONFIG:Release>:${CXX_FLAGS_RELEASE}>"
   )
 ```
+
+## 为语言设定标准
+```cpp
+Factory<CreateAnimal> farm;
+farm.subscribe("CAT",
+                [](const std::string &n) { return std::make_unique<Cat>(n); });
+farm.subscribe("DOG",
+                [](const std::string &n) { return std::make_unique<Dog>(n); });
+
+std::unique_ptr<Animal> simon = farm.create("CAT", "Simon");
+std::unique_ptr<Animal> marlowe = farm.create("DOG", "Marlowe");
+
+std::cout << simon->name() << std::endl;
+std::cout << marlowe->name() << std::endl;
+```
