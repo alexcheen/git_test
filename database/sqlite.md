@@ -121,7 +121,7 @@ sqlite> create table times
 ```
 
 ```sql
-sqlite> create tabe times
+sqlite> create table times
         (id integer, data not null default current_date,
         time not null default current_time,
         timestamp not null default current_timestamp,
