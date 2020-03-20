@@ -475,16 +475,47 @@ target_compile_option(compute-areas
 ```
 
 ## 为语言设定标准
-```cpp
-Factory<CreateAnimal> farm;
-farm.subscribe("CAT",
-                [](const std::string &n) { return std::make_unique<Cat>(n); });
-farm.subscribe("DOG",
-                [](const std::string &n) { return std::make_unique<Dog>(n); });
+```cmake
+set_target_properties(animals
+    PROPERTIES
+        CXX_STANDARD 14
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD_REQUIRED ON
+        POSITION_INDEPENDENT_CODE 1
+)
+```
+ * CXX_STANDARD会设置语言标准 c++20，17，14 11 98
+ * CXX_EXTENSIONS只启用ISO C++标准的编译器标志，不使用特定的编译器扩展
+ * CXX_STANDARD_REQUIRED指定所选标准的版本
 
-std::unique_ptr<Animal> simon = farm.create("CAT", "Simon");
-std::unique_ptr<Animal> marlowe = farm.create("DOG", "Marlowe");
+## 使用控制流
 
-std::cout << simon->name() << std::endl;
-std::cout << marlowe->name() << std::endl;
+```cmake
+#为静态库总体设置优化级别 -o3
+add_library(geometry
+  STATIC
+    geometry_circle.cpp
+    geometry_circle.hpp
+    geometry_polygon.cpp
+    geometry_polygon.hpp
+    geometry_rhombus.cpp
+    geometry_rhombus.hpp
+    geometry_square.cpp
+    geometry_square.hpp
+  )
+target_compile_options(geometry
+  PRIVATE
+      -O3
+  )
+#同时，为个别文件设置优化级别-o2
+list(
+  APPEND sources_with_lower_optimization
+    geometry_circle.cpp
+    geometry_rhombus.cpp
+  )
+message(STATUS "Setting source properties using IN LISTS syntax:")
+foreach(_source IN LISTS sources_with_lower_optimization)
+  set_source_files_properties(${_source} PROPERTIES COMPILE_FLAGS -O2)
+  message(STATUS "Appending -O2 flag for ${_source}")
+endforeach()
 ```
