@@ -16,6 +16,13 @@ typedef char *  va_list;
 #define _crt_va_end(ap)      ( ap = (va_list)0 )
 ```
 
+常见的调用约定有：
+  *  stdcall
+  * cdecl
+  * fastcall
+  * thiscall
+  * naked call
+
 _CDEDL调用约定：
 1.  参数从右到左依次入栈
 2.  调用者负责清理堆栈
