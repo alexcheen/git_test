@@ -1,0 +1,2 @@
+# qt 样式的盒子模型
+MARGIN->BORDER->PADDING->CONTENT
