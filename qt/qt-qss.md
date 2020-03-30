@@ -53,3 +53,26 @@ QLineEdit[echoMode="2"] {
       lineedit-password-character: 9679;
   }
 ```
+
+# 自定义空间的qss设置
+
+```cpp qt
+Q_PROPERTY(QColor m_checkedColor READ checkedColor WRITE setCheckedColor DESIGNABLE true)
+//对于 颜色属性m_checkedColor的设置
+// 并在类中实现 checkedColor的读方法
+// 以及 setCheckedColor的写方法
+QColor CustomWidget::checkedColor()
+{
+    return m_checkedColor;
+}
+
+void CustomWidget::setCheckedColor(QColor new_color)
+{
+    m_checkedColor = new_color;
+}
+```
+对应的QSS文件写法
+```css
+.CustomWidget{
+    qproperty-m_checkedColor: white;
+}
