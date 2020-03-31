@@ -25,6 +25,7 @@ DML的核心是select命令。select的很多操作都来源于关系代数，�
 ```sql
 SELECT [DISTINCT] heading FROM tables WHERE predicate GROUP BY columns HAVING predicate ORDER BY columns LIMIT count,offset;
 ```
+
 ## LIKE与GLOB操作符
 LIKE的作用与相等类似，都是通过一个模式来进行字符串匹配的。
 '%'用来匹配任意多个字符，'_'匹配任意单个字符内容。
