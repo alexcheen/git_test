@@ -1,3 +1,19 @@
+# SQL 简要语
+SQL分为两个部分： 数据操作语言DML 和数据定义语言DDL  
+ 1.  DML 语言部分
+  - SELECT - 从数据库中获取数据
+  - UPDATE - 更新数据库表中的数据
+  - DELETE - 从数据库中删除数据
+  - INSERT INTO - 向数据库中插入数据
+ 2.  DDL 语言部分 
+  - CREATE DATABASE -创建新数据库
+  - ALTER DATABASE - 修改数据库
+  - CREATE TABLE - 创建表
+  - ALTER TABLE - 变更数据库表
+  - DROP TABLE - 删除表
+  - CREATE INDEX - 创建索引
+  - DROP INDEX - 删除索引
+
 #数据库查询
 与数据一起工作是SQL数据操作语言(DML)的工作。
 DML的核心是select命令。select的很多操作都来源于关系代数，并且包含了关系代数的很多内容。
@@ -33,3 +49,5 @@ LIKE的作用与相等类似，都是通过一个模式来进行字符串匹配�
 ```sql
 select * from table where name like '%acp%' and name not like'%Sch%;
 ```
+
+
