@@ -76,7 +76,6 @@ void CustomWidget::setCheckedColor(QColor new_color)
 .CustomWidget{
     qproperty-m_checkedColor: white;
 }
-
 ```
+#### qt4 不支持rgba设定颜色
 
-### qt4 不支持rgba

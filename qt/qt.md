@@ -23,3 +23,8 @@ QFile file(":/res/qss/main.qss");
     QPainter p(this);
     style()->drawPrimitive(QStyle::PE_Widget,&opt,&p, this);
 ```
+
+
+### connect
+
+如果连接了信号和槽，但不用时需断开，多次连接会注册对此调用。
