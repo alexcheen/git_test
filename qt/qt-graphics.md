@@ -1,3 +1,10 @@
+# 三要素
+1. View QGraphicsView
+2. Scene QGraphicsScene
+3. Item QGraphicsItem
+
+
+
 常见的 QGraphicsItem
 为方便起见，Qt 为最常见的形状提供了一组典型的标准 item。它们是：
 
