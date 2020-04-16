@@ -16,3 +16,16 @@ QGraphicsRectItem：提供了一个矩形项
 QGraphicsEllipseItem：提供了一个椭圆项
 QGraphicsPathItem：提供了一个路径项
 QGraphicsPolygonItem：提供了一个多边形项
+
+# placeholder
+
+# saving a scene to an image
+
+```cpp
+    QRect rect = scene.sceneRect().toAlignedRect();
+    QImage image(rect.size(), QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    scene.render(&painter);
+    image.save("scene.png");
+```
