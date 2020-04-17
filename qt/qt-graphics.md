@@ -29,3 +29,13 @@ QGraphicsPolygonItem：提供了一个多边形项
     scene.render(&painter);
     image.save("scene.png");
 ```
+
+# Widgets inside Graphics View
+```cpp
+    QSpinBox *box = new QSpinBox;
+    QGraphicsProxyWidget *proxyItem = new QGraphicsProxyWidget;
+    proxyItem->setWidget(box);
+    scene()->addItem(proxyItem);
+    proxyItem->setScale(2);
+    proxyItem->setRotation(45);
+```
