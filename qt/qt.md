@@ -39,3 +39,14 @@ QFile file(":/res/qss/main.qss");
 ```cpp
 widget->setAttribute(Qt::WA_DeleteOnClose);
 ```
+
+
+### scrollarea
+```cpp
+    QScrollArea *sArea = new QScrollArea(this);
+    QWidget *widget= new QWidget();
+
+    QPushButton *btn = new QPushButton("test", widget);
+    widget->adjustSize();
+    sArea->setWidget(widget);
+```
