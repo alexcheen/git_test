@@ -88,3 +88,26 @@ BEGIN
 END;
 CREATE UNIQUE INDEX checkin_query on checkin (userid, check_in_time);
 ```
+# 记录5K条限制
+## 在系统表内维护数量的记录
+```sql
+CREATE TRIGGER person_del_log after delete on employee
+BEGIN
+    update sysinfo set value=(select value from sysinfo where key='person_num')-1 where key='person_num';
+END;
+CREATE TRIGGER person_ins_log after insert on employee
+BEGIN
+    update sysinfo set value=(select value from sysinfo where key='person_num')+1 where key='person_num';
+END;
+```
+## 使用触发器来对表的记录数量进行限制
+```sql
+CREATE TRIGGER person_max_5k before insert on employee
+BEGIN
+    SELECT CASE
+	when (select value from sysinfo where key='person_num')>=5
+	THEN
+	RAISE(ABORT, 'employee 5k')
+	end;
+END;
+```
