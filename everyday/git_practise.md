@@ -19,3 +19,11 @@ git rebase -i master
 git tag git_tag commit_id
 git describe
 ```
+
+```git
+git commit --amend
+git rebase -i origin/master
+git show-branch
+git blame
+git bisect
+```
