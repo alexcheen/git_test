@@ -50,3 +50,7 @@ widget->setAttribute(Qt::WA_DeleteOnClose);
     widget->adjustSize();
     sArea->setWidget(widget);
 ```
+
+## qt sqlite
+QSqlQuery 在执行exec()之前，执行setForwardOnly(true)，可以适当节省内存。
+QSqlDatabase离开生命周期，调用QSqlDatabase::removeDatabase(const QString &connectionName)彻底释放。
