@@ -111,3 +111,7 @@ BEGIN
 	end;
 END;
 ```
+
+## important note
+1. 建立触发器计数时，记录项的类型一定要为INTERGER，如果为TEXT会引起未知错误。
+2. 一定要注意 LIMIT子句的语法， [LIMIT cnt offset|LIMIT offset,cnt].
