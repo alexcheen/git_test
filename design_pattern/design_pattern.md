@@ -134,3 +134,17 @@
 ![img](visitor.png)
 ![img](3.10structure-zh-indexed.png)
 
+# 4 UML 
+![img](uml/01basic.JPG)
+![img](uml/02hierarchy.PNG)
+<div STYLE="page-break-after: always;"></div>
+
+![img](uml/03interface.PNG)
+![img](uml/4.1arrow_communication.PNG)
+![img](uml/4.2arrow_depends.PNG)
+![img](uml/4.3arrow_consists.PNG)
+![img](uml/4.4arrow_contains.PNG)
+
+
+
+
