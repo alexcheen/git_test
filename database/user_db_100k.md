@@ -1,30 +1,37 @@
 # 一、数据库100K条限制解决方案：
-## 1. 在系统表sysinf内添加字段 'record_num'， 用来记录打卡表的记录条数；
+## 1. 在log表内添加字段 'record_num'， 用来记录打卡表的记录条数；
 ```sql
-insert into sysinfo (key,value) VALUES('record_num',0);
+CREATE TABLE "log" (
+	"key"	TEXT NOT NULL,
+	"value"	INTEGER NOT NULL,
+	PRIMARY KEY("key")
+);
+```
+```sql
+INSERT INTO log (key,value) VALUES('record_num',0);
 ```
 ## 2. 创建2个触发器来维护 record_num 的数量与实际数量匹配：
 ### A: 记录删除时 record_num 减一
 ```sql
 CREATE TRIGGER checkin_del_log after delete on checkin
 BEGIN
-	update sysinfo set value=(select value from sysinfo where key='record_num')-1 where key='record_num';
+update log set value=(select value from log where key='record_num')-1 where key='record_num';
 END
 ```
 ### B: 记录插入时 record_num 加一
 ```sql
 CREATE TRIGGER checkin_ins_log after insert on checkin
 BEGIN
-	update sysinfo set value=(select value from sysinfo where key='record_num')+1 where key='record_num';
+	update log set value=(select value from log where key='record_num')+1 where key='record_num';
 END
 ```
 ## 3. 在更新 record_num时判断是否超过限制量，如果限制进行删除最旧的记录(这里500只做示意）
 ```sql
-CREATE TRIGGER checkin_max_a after update on sysinfo
+CREATE TRIGGER checkin_max_a after update on log
 WHEN
 	new.key='record_num' AND new.value>500
 BEGIN
-	delete from checkin where check_in_time in (select check_in_time from checkin order by check_in_time limit 500,1);
+	delete from checkin where check_in_time in (select check_in_time from checkin order by check_in_time limit 1 offset 0);
 END
 ```
 此处应对checkin表的check_in_time加上索引，以加快运行速度。
@@ -54,25 +61,25 @@ END
 CREATE UNIQUE INDEX checkin_query on checkin (userid, check_in_time);
 ```
 
-# 二、 方法
+# 二、 100K具体方法
 对数据库执行以下脚本
 ## 必要脚本
 
 ```sql
-insert into sysinfo (key,value) VALUES('record_num',0);
+insert into log (key,value) VALUES('record_num',0);
 CREATE TRIGGER checkin_del_log after delete on checkin
 BEGIN
-	update sysinfo set value=(select value from sysinfo where key='record_num')-1 where key='record_num';
+	update log set value=(select value from log where key='record_num')-1 where key='record_num';
 END;
 CREATE TRIGGER checkin_ins_log after insert on checkin
 BEGIN
-	update sysinfo set value=(select value from sysinfo where key='record_num')+1 where key='record_num';
+	update log set value=(select value from log where key='record_num')+1 where key='record_num';
 END;
-CREATE TRIGGER checkin_max_a after update on sysinfo
+CREATE TRIGGER checkin_max_a after update on log
 WHEN
 	new.key='record_num' AND new.value>500
 BEGIN
-	delete from checkin where check_in_time in (select check_in_time from checkin order by check_in_time limit 500,1);
+	delete from checkin where check_in_time in (select check_in_time from checkin order by check_in_time limit 1 offset 0);
 END;
 CREATE INDEX checkin_500 on checkin (check_in_time);
 ```
@@ -88,16 +95,19 @@ BEGIN
 END;
 CREATE UNIQUE INDEX checkin_query on checkin (userid, check_in_time);
 ```
-# 记录5K条限制
+# 人员5K条限制
 ## 在系统表内维护数量的记录
+```sql
+INSERT INTO log ("key", "value") VALUES ('person_num', '0');
+```
 ```sql
 CREATE TRIGGER person_del_log after delete on employee
 BEGIN
-    update sysinfo set value=(select value from sysinfo where key='person_num')-1 where key='person_num';
+    update log set value=(select value from log where key='person_num')-1 where key='person_num';
 END;
 CREATE TRIGGER person_ins_log after insert on employee
 BEGIN
-    update sysinfo set value=(select value from sysinfo where key='person_num')+1 where key='person_num';
+    update log set value=(select value from log where key='person_num')+1 where key='person_num';
 END;
 ```
 ## 使用触发器来对表的记录数量进行限制
@@ -105,7 +115,7 @@ END;
 CREATE TRIGGER person_max_5k before insert on employee
 BEGIN
     SELECT CASE
-	when (select value from sysinfo where key='person_num')>=5
+	when (select value from log where key='person_num')>=5
 	THEN
 	RAISE(ABORT, 'employee 5k')
 	end;
