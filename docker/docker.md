@@ -21,9 +21,43 @@
 |容器资源管理|volume、network|
 |系统日志信息|events、history、logs|
 
+
+## 部署Docker集群
+
+### 下载
+```shell
+sudo docker pull ubuntu
+sudo docker pull django
+sudo docker pull haproxy
+sudo docker pull redis
+```
+### 应用栈容器节点互联
+使用(--link)建立容器间的连接是，Docker将自动维护映射关系中的IP地址。**host文件**。
+
+### 应用栈容器节点启动
+```shell
+# 启动Redis容器
+sudo docker run -it --name redis-master redis /bin/bash
+sudo docker run -it --name redis-slave1 --link redis-master:master redis /bin/bash
+sudo docker run -it --name redis-slave2 --link redis-master:master redis /bin/bash
+
+# 启动Django容器
+sudo docker run -it --name APP1 --link redis-master:db -v ~/Projects/Djago/App1:/usr/src/app django /bin/bash
+sudo docker run -it --name APP2 --link redis-master:db -v ~/Projects/Djago/App2:/usr/src/app django /bin/bash
+
+# 启动HAProxy容器
+sudo docker run -it --name HAProxy --link APP1:APP1 --link APP2:APP2 -p 6301:6301 -v ~/Projects/HAProxy:/tmp haproxy /bin/bash
+```
+
+### 应用栈容器配置
+
+```shell
+sudo docker inspect --format "{{.Volumes}}" ContainerID
+```
+
 [原文地址](http://www.sel.zju.edu.cn/?p=573)
 ## Overall
-1. Docker本质时宿主机的一个进程
+1. Docker本质是宿主机的一个进程
 2. 通过namespace实现资源隔离 
 3. cgroups实现资源限制
 4. UnionFs实现Copy on Write的文件操作
