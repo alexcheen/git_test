@@ -22,3 +22,25 @@ or同样会导致数据库进项全表搜索。
 
 # 使用limit子句限制返回的数据行数
 如果前台只需要显示15行数据，而你的查询结果集返回了1万行，那么这适合最好使用limit子句来限制查询返回的数据行数。
+
+
+# sample
+```sql
+--  before opt SQL
+SELECT cols FROM 'table_name'
+WHERE conditions LIMIT 0,10;
+```
+```sql
+-- after opt SQL
+SELECT  cols
+FROM `table_name` main_tale
+RIGHT JOIN 
+(
+SELECT  子查询只查主键
+FROM `table_name`
+WHERE conditions
+LIMIT 0,10;
+) temp_table ON temp_table.主键 = main_table.主键
+
+```
+https://zhuanlan.zhihu.com/p/137015279
